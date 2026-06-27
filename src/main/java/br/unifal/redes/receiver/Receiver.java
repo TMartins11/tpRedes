@@ -3,9 +3,13 @@ package br.unifal.redes.receiver;
 import br.unifal.redes.common.Packet;
 import br.unifal.redes.common.PacketSerializer;
 import br.unifal.redes.common.SessionParameters;
+import br.unifal.redes.receiver.io.FileWriterService;
 import br.unifal.redes.receiver.network.AckSender;
 import br.unifal.redes.receiver.network.IncomingPacket;
 import br.unifal.redes.receiver.network.PacketReceiver;
+import br.unifal.redes.receiver.session.ReceiverSession;
+import br.unifal.redes.receiver.statistics.ReceiverStatistics;
+
 import java.io.IOException;
 import java.net.DatagramSocket;
 import java.util.Random;

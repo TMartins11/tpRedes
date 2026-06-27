@@ -1,4 +1,4 @@
-package br.unifal.redes.receiver;
+package br.unifal.redes.receiver.statistics;
 
 import java.util.concurrent.atomic.AtomicLong;
 

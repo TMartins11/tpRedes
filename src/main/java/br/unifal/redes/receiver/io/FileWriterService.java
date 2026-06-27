@@ -1,4 +1,4 @@
-package br.unifal.redes.receiver;
+package br.unifal.redes.receiver.io;
 
 import java.io.BufferedOutputStream;
 import java.io.FileOutputStream;
