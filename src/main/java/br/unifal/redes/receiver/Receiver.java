@@ -1,11 +1,12 @@
 package br.unifal.redes.receiver;
 
+import br.unifal.redes.receiver.fsm.GbnReceiverFsm;
+import br.unifal.redes.receiver.io.FileWriterService;
 import br.unifal.redes.receiver.network.AckSender;
 import br.unifal.redes.receiver.network.PacketReceiver;
 
 import java.io.IOException;
 import java.net.DatagramSocket;
-import java.util.concurrent.CountDownLatch;
 
 /**
  * Ponto de entrada do módulo Receptor.
@@ -14,13 +15,13 @@ import java.util.concurrent.CountDownLatch;
  * <ul>
  *   <li>Validar o argumento de linha de comando.</li>
  *   <li>Abrir o {@link DatagramSocket} na porta configurada.</li>
- *   <li>Instanciar {@link PacketReceiver} e {@link AckSender}.</li>
- *   <li>Deixar a infraestrutura pronta para que a FSM (P2) seja integrada
- *       sem reescrever esta classe.</li>
+ *   <li>Instanciar {@link PacketReceiver}, {@link AckSender} e
+ *       {@link FileWriterService}.</li>
+ *   <li>Instanciar e executar a {@link GbnReceiverFsm}, que concentra
+ *       toda a lógica do protocolo Go-Back-N.</li>
  * </ul>
  *
- * <p>Não há nenhuma lógica de protocolo aqui. Toda a FSM do Go-Back-N
- * será implementada no P2 e orquestrada a partir deste ponto de entrada.
+ * <p>Não há nenhuma lógica de protocolo nesta classe — apenas bootstrap.
  *
  * <h2>Uso</h2>
  * <pre>
@@ -49,24 +50,20 @@ public final class Receiver {
 
         try (DatagramSocket socket = new DatagramSocket(port)) {
 
-            PacketReceiver packetReceiver = new PacketReceiver(socket);
-            AckSender      ackSender      = new AckSender(socket);
+            PacketReceiver   packetReceiver = new PacketReceiver(socket);
+            AckSender        ackSender      = new AckSender(socket);
+            FileWriterService fileWriter    = new FileWriterService();
 
             System.out.println("[Receptor] Infraestrutura pronta. Aguardando conexão do Emissor.");
 
-            /*
-             * >>> PONTO DE INTEGRAÇÃO DO P2 <<<
-             *
-             * Substituir o await() abaixo por:
-             *
-             *   GbnReceiverFsm fsm = new GbnReceiverFsm(packetReceiver, ackSender);
-             *   fsm.run();
-             *
-             * O socket permanece aberto durante toda a execução do try-with-resources,
-             * portanto a FSM terá acesso ao canal UDP pelo tempo que precisar.
-             * Esta classe não precisará ser modificada.
-             */
-            new CountDownLatch(1).await();
+            // >>> INTEGRAÇÃO P2: executa o protocolo Go-Back-N completo.
+            // A FSM bloqueia até receber o FIN ou até ocorrer erro fatal.
+            // O socket permanece aberto durante toda a execução graças ao
+            // try-with-resources acima — nenhuma alteração necessária aqui.
+            GbnReceiverFsm fsm = new GbnReceiverFsm();
+            fsm.executar(packetReceiver, ackSender, fileWriter);
+
+            System.out.println("[Receptor] Transferência concluída. Encerrando.");
 
         } catch (IOException e) {
             System.err.printf(
@@ -74,9 +71,6 @@ public final class Receiver {
                     port, e.getMessage()
             );
             System.exit(1);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            System.out.println("[Receptor] Processo interrompido. Encerrando.");
         }
     }
 
