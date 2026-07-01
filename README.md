@@ -3,7 +3,8 @@
 **Disciplina:** Redes de Computadores  
 **Instituição:** Universidade Federal de Alfenas — UNIFAL-MG  
 **Professor:** Flavio Barbieri Gonzaga  
-**Autor:** Pedro Finochio — RA: 2024.1.08.020
+**Autores:** Pedro Finochio e Thiago Martins 
+
 
 ---
 
