@@ -3,27 +3,28 @@ package br.unifal.redes.sender.network;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Tracks the state of the Go-Back-N sender's retransmission timeout.
+ * Rastreia o estado do timeout de retransmissão do transmissor Go-Back-N.
  *
- * <p>This class is a pure protocol-support component. It stores a configured
- * timeout duration and the instant a timer was last armed, and exposes
- * calculations — elapsed time, remaining time, expiration — that the
- * sender's FSM polls to decide when a retransmission burst is due.
+ * <p>Esta classe é um componente puro de suporte ao protocolo. Ela armazena uma duração
+ * de timeout configurada e o instante em que um temporizador foi armado pela última vez,
+ * e expõe cálculos — tempo decorrido, tempo restante, expiração — que a
+ * FSM do transmissor consulta periodicamente para decidir quando um burst de
+ * retransmissão é devido.
  *
- * <p>This class performs no actual retransmission, no network I/O, no file
- * I/O, and schedules no background work of any kind. There is no
- * {@link Thread}, {@code Timer}, or {@code ScheduledExecutorService}
- * involved — the FSM is expected to call {@link #hasExpired()} periodically
- * (e.g. from its own polling loop) and react accordingly.
+ * <p>Esta classe não realiza retransmissão real, E/S de rede, E/S de arquivo
+ * e não agenda nenhum tipo de trabalho em segundo plano. Não há
+ * {@link Thread}, {@code Timer} ou {@code ScheduledExecutorService}
+ * envolvidos — espera-se que a FSM chame {@link #hasExpired()} periodicamente
+ * (por exemplo, a partir de seu próprio loop de polling) e reaja de acordo.
  *
- * <p>Elapsed-time calculations use {@link System#nanoTime()} rather than
- * {@link System#currentTimeMillis()}, since {@code nanoTime} is monotonic
- * and unaffected by wall-clock adjustments, making it the correct choice for
- * measuring durations.
+ * <p>Os cálculos de tempo decorrido usam {@link System#nanoTime()} em vez de
+ * {@link System#currentTimeMillis()}, pois {@code nanoTime} é monotônico
+ * e não é afetado por ajustes de relógio de parede, tornando-o a escolha correta
+ * para medir durações.
  *
- * <p>Thread-safety: this class is not synchronized. It is intended to be
- * owned and driven by a single sender FSM thread; callers that need
- * concurrent access must coordinate externally.
+ * <p>Segurança de thread: esta classe não é sincronizada. Ela é destinada a ser
+ * de propriedade e conduzida por uma única thread da FSM do transmissor; chamadores que
+ * precisam de acesso concorrente devem coordenar externamente.
  */
 public final class TimeoutManager {
 
@@ -34,14 +35,14 @@ public final class TimeoutManager {
     private long startNanos;
 
     /**
-     * Creates a new timeout manager with the given timeout duration.
+     * Cria um novo gerenciador de timeout com a duração de timeout fornecida.
      *
-     * @param timeoutMillis the timeout duration, in milliseconds; must be &gt; 0
-     * @throws IllegalArgumentException if {@code timeoutMillis} is not positive
+     * @param timeoutMillis a duração do timeout, em milissegundos; deve ser &gt; 0
+     * @throws IllegalArgumentException se {@code timeoutMillis} não for positivo
      */
     public TimeoutManager(long timeoutMillis) {
         if (timeoutMillis <= 0) {
-            throw new IllegalArgumentException("timeoutMillis must be > 0, got: " + timeoutMillis);
+            throw new IllegalArgumentException("timeoutMillis deve ser > 0, recebido: " + timeoutMillis);
         }
         this.timeoutMillis = timeoutMillis;
         this.timeoutNanos = TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
@@ -49,76 +50,77 @@ public final class TimeoutManager {
     }
 
     // -------------------------------------------------------------------------
-    // FSM-facing mutators
+    // Mutadores voltados para a FSM
     // -------------------------------------------------------------------------
 
     /**
-     * Arms the timer, capturing the current instant as its start point.
+     * Arma o temporizador, capturando o instante atual como seu ponto de partida.
      *
-     * <p>Use this for the first arming of a fresh timeout. If a timer may
-     * already be running and should simply be reset, use {@link #restart()}
-     * instead.
+     * <p>Use este método para o primeiro armamento de um timeout novo. Se um temporizador
+     * já estiver em execução e simplesmente deve ser reiniciado, use {@link #restart()}
+     * em vez disso.
      *
-     * @throws IllegalStateException if the timer is already running
+     * @throws IllegalStateException se o temporizador já estiver em execução
      */
     public void start() {
         if (running) {
             throw new IllegalStateException(
-                    "Timer is already running; call restart() to reset it or cancel() first");
+                    "O temporizador já está em execução; chame restart() para reiniciá-lo ou cancel() primeiro");
         }
         arm();
     }
 
     /**
-     * Re-arms the timer, resetting its start point to the current instant,
-     * regardless of whether it was already running.
+     * Re-arma o temporizador, redefinindo seu ponto de partida para o instante atual,
+     * independentemente de já estar em execução.
      *
-     * <p>This is the typical operation performed when a partial ACK arrives
-     * while packets are still in flight: the timeout clock restarts from now.
+     * <p>Esta é a operação típica executada quando um ACK parcial chega
+     * enquanto pacotes ainda estão em trânsito: o relógio do timeout reinicia a partir de agora.
      */
     public void restart() {
         arm();
     }
 
     /**
-     * Disarms the timer. After this call, {@link #isRunning()} returns
-     * {@code false} and {@link #hasExpired()} returns {@code false} until the
-     * timer is armed again via {@link #start()} or {@link #restart()}.
+     * Desarma o temporizador. Após esta chamada, {@link #isRunning()} retorna
+     * {@code false} e {@link #hasExpired()} retorna {@code false} até que o
+     * temporizador seja armado novamente via {@link #start()} ou {@link #restart()}.
      *
-     * <p>Idempotent — calling {@code cancel()} on an already-stopped timer
-     * has no effect.
+     * <p>Idempotente — chamar {@code cancel()} em um temporizador já parado
+     * não tem efeito.
      */
     public void cancel() {
         running = false;
     }
 
     // -------------------------------------------------------------------------
-    // Queries
+    // Consultas
     // -------------------------------------------------------------------------
 
     /**
-     * @return {@code true} if the timer is currently armed (started or
-     *         restarted, and not yet cancelled)
+     * @return {@code true} se o temporizador estiver atualmente armado (iniciado ou
+     *         reiniciado, e ainda não cancelado)
      */
     public boolean isRunning() {
         return running;
     }
 
     /**
-     * Indicates whether the configured timeout duration has elapsed since the
-     * timer was last armed.
+     * Indica se a duração de timeout configurada decorreu desde que o
+     * temporizador foi armado pela última vez.
      *
-     * @return {@code true} if the timer is running and its elapsed time has
-     *         reached or exceeded the configured timeout; {@code false} if
-     *         the timer is not running or has not yet expired
+     * @return {@code true} se o temporizador estiver em execução e seu tempo decorrido
+     *         tiver atingido ou excedido o timeout configurado; {@code false} se
+     *         o temporizador não estiver em execução ou ainda não tiver expirado
      */
     public boolean hasExpired() {
         return running && elapsedNanosSinceArmed() >= timeoutNanos;
     }
 
     /**
-     * @return the time elapsed, in milliseconds, since the timer was last
-     *         armed, or {@code 0} if the timer is not currently running
+     * @return o tempo decorrido, em milissegundos, desde que o temporizador foi
+     *         armado pela última vez, ou {@code 0} se o temporizador não estiver
+     *         atualmente em execução
      */
     public long elapsedMillis() {
         if (!running) {
@@ -128,9 +130,9 @@ public final class TimeoutManager {
     }
 
     /**
-     * @return the time remaining, in milliseconds, before the timer expires,
-     *         clamped to {@code 0} if it has already expired, or {@code 0} if
-     *         the timer is not currently running
+     * @return o tempo restante, em milissegundos, antes que o temporizador expire,
+     *         limitado a {@code 0} se já tiver expirado, ou {@code 0} se
+     *         o temporizador não estiver atualmente em execução
      */
     public long remainingMillis() {
         if (!running) {
@@ -140,13 +142,13 @@ public final class TimeoutManager {
         return TimeUnit.NANOSECONDS.toMillis(Math.max(0L, remainingNanos));
     }
 
-    /** @return the configured timeout duration, in milliseconds */
+    /** @return a duração de timeout configurada, em milissegundos */
     public long getTimeoutMillis() {
         return timeoutMillis;
     }
 
     // -------------------------------------------------------------------------
-    // Helpers
+    // Métodos auxiliares
     // -------------------------------------------------------------------------
 
     private void arm() {

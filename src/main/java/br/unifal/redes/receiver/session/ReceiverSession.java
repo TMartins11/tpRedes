@@ -6,26 +6,26 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * Represents the mutable state of a single Go-Back-N reception session.
+ * Representa o estado mutável de uma única sessão de recepção Go-Back-N.
  *
- * <p>This class is the single source of truth for protocol-level state during a
- * transfer. It does not perform any network I/O or file I/O. Its sole job is to
- * hold and expose the values that the FSM will read and update as packets arrive.
+ * <p>Esta classe é a única fonte da verdade para o estado em nível de protocolo durante uma
+ * transferência. Ela não realiza nenhuma E/S de rede ou E/S de arquivo. Sua única função é
+ * armazenar e expor os valores que a FSM (Máquina de Estados Finitos) irá ler e atualizar
+ * conforme os pacotes chegam.
  *
- * <p>Instances are created once per transfer, via {@link #open(SessionParameters)},
- * and closed exactly once via {@link #close()}.
+ * <p>Instâncias são criadas uma vez por transferência, via {@link #open(SessionParameters, String)},
+ * e fechadas exatamente uma vez via {@link #close()}.
  *
- * <p>Thread-safety: individual field accessors are not synchronized. The FSM that
- * drives this session is responsible for coordinating concurrent access when
- * applicable.
+ * <p>Segurança de thread: os acessores individuais de campo não são sincronizados. A FSM que
+ * conduz esta sessão é responsável por coordenar o acesso concorrente quando aplicável.
  */
 public final class ReceiverSession {
 
-    /** Protocol state of this session. */
+    /** Estado de protocolo desta sessão. */
     public enum State {
-        /** Handshake received; ready to accept data packets. */
+        /** Handshake recebido; pronto para aceitar pacotes de dados. */
         RECEIVING,
-        /** FIN received or transfer completed; no more data expected. */
+        /** FIN recebido ou transferência concluída; nenhum dado adicional é esperado. */
         CLOSED
     }
 
@@ -34,14 +34,14 @@ public final class ReceiverSession {
     private final Instant startedAt;
 
     /**
-     * Next sequence number the receiver will accept.
-     * Initialized to 0 per GBN FSM (expectedseqnum = 0).
+     * Próximo número de sequência que o receptor aceitará.
+     * Inicializado como 0 conforme a FSM GBN (expectedseqnum = 0).
      */
     private int expectedSequenceNumber;
 
     /**
-     * Sequence number of the last ACK sent.
-     * Initialized to -1 to indicate no ACK has been sent yet.
+     * Número de sequência do último ACK enviado.
+     * Inicializado como -1 para indicar que nenhum ACK foi enviado ainda.
      */
     private int lastAcknowledgedSequenceNumber;
 
@@ -49,7 +49,7 @@ public final class ReceiverSession {
     private Instant finishedAt;
 
     // -------------------------------------------------------------------------
-    // Construction
+    // Construção
     // -------------------------------------------------------------------------
 
     private ReceiverSession(SessionParameters parameters, String destinationPath) {
@@ -62,24 +62,24 @@ public final class ReceiverSession {
     }
 
     /**
-     * Creates and opens a new reception session.
+     * Cria e abre uma nova sessão de recepção.
      *
-     * @param parameters     session parameters negotiated during handshake; must not be {@code null}
-     * @param destinationPath absolute path where the received file will be written; must not be blank
-     * @return a new {@link ReceiverSession} in {@link State#RECEIVING}
-     * @throws NullPointerException     if {@code parameters} is {@code null}
-     * @throws IllegalArgumentException if {@code destinationPath} is blank
+     * @param parameters     parâmetros da sessão negociados durante o handshake; não deve ser {@code null}
+     * @param destinationPath caminho absoluto onde o arquivo recebido será escrito; não deve estar em branco
+     * @return uma nova {@link ReceiverSession} no estado {@link State#RECEIVING}
+     * @throws NullPointerException     se {@code parameters} for {@code null}
+     * @throws IllegalArgumentException se {@code destinationPath} estiver em branco
      */
     public static ReceiverSession open(SessionParameters parameters, String destinationPath) {
-        Objects.requireNonNull(parameters, "parameters must not be null");
+        Objects.requireNonNull(parameters, "parameters não deve ser nulo");
         if (destinationPath == null || destinationPath.isBlank()) {
-            throw new IllegalArgumentException("destinationPath must not be blank");
+            throw new IllegalArgumentException("destinationPath não deve estar em branco");
         }
         return new ReceiverSession(parameters, destinationPath);
     }
 
     // -------------------------------------------------------------------------
-    // FSM-facing mutators
+    // Mutadores voltados para a FSM
     // -------------------------------------------------------------------------
 
 
@@ -89,9 +89,9 @@ public final class ReceiverSession {
     }
 
     /**
-     * Records the sequence number of the most recently sent ACK.
+     * Registra o número de sequência do ACK enviado mais recentemente.
      *
-     * @param seqnum the sequence number that was acknowledged
+     * @param seqnum o número de sequência que foi reconhecido (acknowledged)
      */
     public void recordAcknowledgement(int seqnum) {
         requireState(State.RECEIVING);
@@ -100,9 +100,9 @@ public final class ReceiverSession {
     }
 
     /**
-     * Transitions the session to {@link State#CLOSED} and records the finish timestamp.
+     * Transiciona a sessão para {@link State#CLOSED} e registra o timestamp de finalização.
      *
-     * @throws IllegalStateException if the session is already closed
+     * @throws IllegalStateException se a sessão já estiver fechada
      */
     public void close() {
         requireState(State.RECEIVING);
@@ -111,58 +111,58 @@ public final class ReceiverSession {
     }
 
     // -------------------------------------------------------------------------
-    // Accessors
+    // Acessores
     // -------------------------------------------------------------------------
 
-    /** @return the session parameters received during handshake */
+    /** @return os parâmetros da sessão recebidos durante o handshake */
     public SessionParameters getParameters() {
         return parameters;
     }
 
-    /** @return absolute destination path for the file being received */
+    /** @return caminho absoluto de destino para o arquivo sendo recebido */
     public String getDestinationPath() {
         return destinationPath;
     }
 
-    /** @return the next sequence number the GBN FSM will accept */
+    /** @return o próximo número de sequência que a FSM GBN aceitará */
     public int getExpectedSequenceNumber() {
         return expectedSequenceNumber;
     }
 
     /**
-     * @return the sequence number of the last ACK sent, or {@code -1} if no
-     *         ACK has been sent yet
+     * @return o número de sequência do último ACK enviado, ou {@code -1} se nenhum
+     *         ACK tiver sido enviado ainda
      */
     public int getLastAcknowledgedSequenceNumber() {
         return lastAcknowledgedSequenceNumber;
     }
 
-    /** @return the current state of this session */
+    /** @return o estado atual desta sessão */
     public State getState() {
         return state;
     }
 
-    /** @return the instant this session was opened */
+    /** @return o instante em que esta sessão foi aberta */
     public Instant getStartedAt() {
         return startedAt;
     }
 
     /**
-     * @return the instant this session was closed, or {@code null} if still open
+     * @return o instante em que esta sessão foi fechada, ou {@code null} se ainda estiver aberta
      */
     public Instant getFinishedAt() {
         return finishedAt;
     }
 
     /**
-     * @return {@code true} if the session is still accepting packets
+     * @return {@code true} se a sessão ainda estiver aceitando pacotes
      */
     public boolean isReceiving() {
         return state == State.RECEIVING;
     }
 
     // -------------------------------------------------------------------------
-    // Helpers
+    // Métodos auxiliares
     // -------------------------------------------------------------------------
 
 
@@ -170,14 +170,14 @@ public final class ReceiverSession {
     private void requireState(State expected) {
         if (state != expected) {
             throw new IllegalStateException(
-                    "Operation requires state " + expected + " but current state is " + state);
+                    "Operação requer o estado " + expected + " mas o estado atual é " + state);
         }
     }
 
     private void validateSequenceNumber(int seqnum) {
         if (seqnum < 0) {
             throw new IllegalArgumentException(
-                    "Sequence number must be non-negative: " + seqnum);
+                    "O número de sequência deve ser não negativo: " + seqnum);
         }
     }
 

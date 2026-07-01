@@ -9,117 +9,116 @@ import java.util.Objects;
 import java.util.TreeMap;
 
 /**
- * Buffers packets that have been sent but not yet acknowledged.
+ * Armazena em buffer pacotes que foram enviados mas ainda não foram reconhecidos (acknowledged).
  *
- * <p>This class is a pure state-management component. It associates each
- * outstanding packet with the sequence number it was sent under, and exposes
- * the operations the sender's Go-Back-N retransmission logic needs: looking
- * up a single buffered packet, dropping packets confirmed by a cumulative
- * ACK, and listing every packet that would need to be resent in a
- * retransmission burst.
+ * <p>Esta classe é um componente puro de gerenciamento de estado. Ela associa cada
+ * pacote pendente ao número de sequência sob o qual foi enviado e expõe
+ * as operações que a lógica de retransmissão Go-Back-N do transmissor necessita:
+ * buscar um único pacote em buffer, remover pacotes confirmados por um ACK
+ * cumulativo e listar cada pacote que precisaria ser reenviado em um
+ * burst de retransmissão.
  *
- * <p>This class performs no network I/O, no file I/O, and schedules no
- * background work. It does not know how to serialize, send, or interpret a
- * packet — {@code T} is treated as an opaque payload; only the sequence
- * number is meaningful to this class.
+ * <p>Esta classe não realiza E/S de rede, E/S de arquivo e não agenda nenhum
+ * trabalho em segundo plano. Ela não sabe como serializar, enviar ou interpretar um
+ * pacote — {@code T} é tratado como um payload opaco; apenas o número
+ * de sequência é significativo para esta classe.
  *
- * <p>Packets are kept ordered by sequence number internally, so
- * {@link #getOutstandingPackets()} always returns them in ascending sequence
- * order, matching the order a Go-Back-N retransmission burst must resend
- * them in.
+ * <p>Os pacotes são mantidos ordenados internamente por número de sequência, portanto
+ * {@link #getOutstandingPackets()} sempre os retorna em ordem crescente de sequência,
+ * correspondendo à ordem em que um burst de retransmissão Go-Back-N deve reenviá-los.
  *
- * <p>Thread-safety: this class is not synchronized. It is intended to be
- * owned and driven by a single sender FSM thread; callers that need
- * concurrent access must coordinate externally.
+ * <p>Segurança de thread: esta classe não é sincronizada. Ela é destinada a ser
+ * de propriedade e conduzida por uma única thread da FSM do transmissor; chamadores que
+ * precisam de acesso concorrente devem coordenar externamente.
  *
- * @param <T> the type of packet payload being buffered; this class does not
- *            inspect or depend on its structure
+ * @param <T> o tipo de payload do pacote sendo armazenado em buffer; esta classe não
+ *            inspeciona ou depende de sua estrutura
  */
 public final class PacketBuffer<T> {
 
     private final NavigableMap<Integer, T> buffer = new TreeMap<>();
 
     // -------------------------------------------------------------------------
-    // FSM-facing mutators
+    // Mutadores voltados para a FSM
     // -------------------------------------------------------------------------
 
     /**
-     * Buffers {@code packet} as the outstanding packet for {@code seqNum}.
+     * Armazena em buffer {@code packet} como o pacote pendente para {@code seqNum}.
      *
-     * @param seqNum the sequence number the packet was sent under; must be &gt;= 0
-     * @param packet the packet payload to buffer; must not be {@code null}
-     * @throws IllegalArgumentException if {@code seqNum} is negative
-     * @throws NullPointerException     if {@code packet} is {@code null}
-     * @throws IllegalStateException    if a packet is already buffered for
-     *                                   {@code seqNum} — the caller must
-     *                                   remove or replace it explicitly
-     *                                   rather than silently overwriting it
+     * @param seqNum o número de sequência sob o qual o pacote foi enviado; deve ser &gt;= 0
+     * @param packet o payload do pacote a ser armazenado em buffer; não deve ser {@code null}
+     * @throws IllegalArgumentException se {@code seqNum} for negativo
+     * @throws NullPointerException     se {@code packet} for {@code null}
+     * @throws IllegalStateException    se um pacote já estiver em buffer para
+     *                                   {@code seqNum} — o chamador deve
+     *                                   removê-lo ou substituí-lo explicitamente
+     *                                   em vez de sobrescrevê-lo silenciosamente
      */
     public void add(int seqNum, T packet) {
         if (seqNum < 0) {
-            throw new IllegalArgumentException("seqNum must be >= 0, got: " + seqNum);
+            throw new IllegalArgumentException("seqNum deve ser >= 0, recebido: " + seqNum);
         }
-        Objects.requireNonNull(packet, "packet must not be null");
+        Objects.requireNonNull(packet, "packet não deve ser nulo");
         if (buffer.containsKey(seqNum)) {
-            throw new IllegalStateException("A packet is already buffered for seqNum " + seqNum);
+            throw new IllegalStateException("Já existe um pacote em buffer para o seqNum " + seqNum);
         }
         buffer.put(seqNum, packet);
     }
 
     /**
-     * Removes every buffered packet with a sequence number less than or
-     * equal to {@code ackSeqNum}, reflecting a cumulative ACK.
+     * Remove todos os pacotes em buffer com um número de sequência menor ou
+     * igual a {@code ackSeqNum}, refletindo um ACK cumulativo.
      *
-     * <p>This mirrors standard Go-Back-N cumulative-ACK semantics: an ACK for
-     * {@code ackSeqNum} confirms delivery of every packet up to and
-     * including it, so all of them can be dropped from the buffer.
+     * <p>Isso espelha a semântica padrão de ACK cumulativo do Go-Back-N: um ACK para
+     * {@code ackSeqNum} confirma a entrega de todos os pacotes até e
+     * incluindo ele, portanto todos podem ser removidos do buffer.
      *
-     * <p>If no buffered packet qualifies — e.g. a stale or duplicate ACK —
-     * this method is a no-op rather than an error, since that is normal,
-     * expected behavior in Go-Back-N.
+     * <p>Se nenhum pacote em buffer se qualificar — por exemplo, um ACK desatualizado ou duplicado —
+     * este método não tem efeito em vez de gerar erro, pois esse é um comportamento
+     * normal e esperado no Go-Back-N.
      *
-     * @param ackSeqNum the highest sequence number being cumulatively
-     *                  acknowledged; must be &gt;= 0
-     * @throws IllegalArgumentException if {@code ackSeqNum} is negative
+     * @param ackSeqNum o maior número de sequência sendo reconhecido
+     *                  cumulativamente; deve ser &gt;= 0
+     * @throws IllegalArgumentException se {@code ackSeqNum} for negativo
      */
     public void removeUpTo(int ackSeqNum) {
         if (ackSeqNum < 0) {
-            throw new IllegalArgumentException("ackSeqNum must be >= 0, got: " + ackSeqNum);
+            throw new IllegalArgumentException("ackSeqNum deve ser >= 0, recebido: " + ackSeqNum);
         }
         buffer.headMap(ackSeqNum, true).clear();
     }
 
     // -------------------------------------------------------------------------
-    // Queries
+    // Consultas
     // -------------------------------------------------------------------------
 
     /**
-     * Returns the packet buffered for {@code seqNum}.
+     * Retorna o pacote armazenado em buffer para {@code seqNum}.
      *
-     * @param seqNum the sequence number to look up; must be &gt;= 0
-     * @return the packet buffered for {@code seqNum}
-     * @throws IllegalArgumentException if {@code seqNum} is negative
-     * @throws NoSuchElementException   if no packet is buffered for {@code seqNum}
+     * @param seqNum o número de sequência a ser consultado; deve ser &gt;= 0
+     * @return o pacote armazenado em buffer para {@code seqNum}
+     * @throws IllegalArgumentException se {@code seqNum} for negativo
+     * @throws NoSuchElementException   se nenhum pacote estiver em buffer para {@code seqNum}
      */
     public T get(int seqNum) {
         if (seqNum < 0) {
-            throw new IllegalArgumentException("seqNum must be >= 0, got: " + seqNum);
+            throw new IllegalArgumentException("seqNum deve ser >= 0, recebido: " + seqNum);
         }
         T packet = buffer.get(seqNum);
         if (packet == null) {
-            throw new NoSuchElementException("No packet buffered for seqNum " + seqNum);
+            throw new NoSuchElementException("Nenhum pacote em buffer para o seqNum " + seqNum);
         }
         return packet;
     }
 
     /**
-     * Returns every currently buffered packet, paired with the sequence
-     * number it was sent under, ordered ascending by sequence number.
+     * Retorna todos os pacotes atualmente em buffer, pareados com o número
+     * de sequência sob o qual foram enviados, ordenados de forma crescente por número de sequência.
      *
-     * <p>This is the list a Go-Back-N retransmission burst would resend, in
-     * the order it must resend them.
+     * <p>Esta é a lista que um burst de retransmissão Go-Back-N reenviaria, na
+     * ordem em que deve reenviá-los.
      *
-     * @return an immutable, ascending-order list of (sequence number, packet) pairs
+     * @return uma lista imutável e em ordem crescente de pares (número de sequência, pacote)
      */
     public List<Map.Entry<Integer, T>> getOutstandingPackets() {
         return buffer.entrySet().stream()
@@ -128,12 +127,12 @@ public final class PacketBuffer<T> {
                 .toList();
     }
 
-    /** @return {@code true} if no packets are currently buffered */
+    /** @return {@code true} se nenhum pacote estiver atualmente em buffer */
     public boolean isEmpty() {
         return buffer.isEmpty();
     }
 
-    /** @return the number of packets currently buffered */
+    /** @return o número de pacotes atualmente em buffer */
     public int size() {
         return buffer.size();
     }

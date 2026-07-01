@@ -3,17 +3,17 @@ package br.unifal.redes.receiver.statistics;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Accumulates protocol-level event counters for a single reception session.
+ * Acumula contadores de eventos em nível de protocolo para uma única sessão de recepção.
  *
- * <p>Consumers register discrete events via the {@code record*()} methods.
- * No output is produced here; formatting and printing are the responsibility
- * of higher-level components that call {@link #snapshot()}.
+ * <p>Os consumidores registram eventos discretos através dos métodos {@code record*()}.
+ * Nenhuma saída é produzida aqui; formatação e impressão são responsabilidade
+ * de componentes de nível superior que chamam {@link #snapshot()}.
  *
- * <p>All counters are backed by {@link AtomicLong} so that concurrent
- * sender/receiver threads may safely register events without external
- * synchronization.
+ * <p>Todos os contadores são suportados por {@link AtomicLong} para que threads
+ * concorrentes de envio/recepção possam registrar eventos com segurança sem
+ * sincronização externa.
  *
- * <p>Usage pattern expected by the FSM:
+ * <p>Padrão de uso esperado pela FSM:
  * <pre>{@code
  *   statistics.recordPacketReceived();
  *   if (accepted) {
@@ -32,59 +32,59 @@ public final class ReceiverStatistics {
     private final AtomicLong totalAcksSent  = new AtomicLong(0);
 
     // -------------------------------------------------------------------------
-    // Event registration
+    // Registro de eventos
     // -------------------------------------------------------------------------
 
     /**
-     * Registers that a data packet arrived at the socket (before any filtering).
-     * Must be called for every incoming DATA datagram, regardless of outcome.
+     * Registra que um pacote de dados chegou ao socket (antes de qualquer filtragem).
+     * Deve ser chamado para cada datagrama DATA recebido, independentemente do resultado.
      */
     public void recordPacketReceived() {
         totalReceived.incrementAndGet();
     }
 
     /**
-     * Registers that a packet was accepted by the GBN FSM (correct order,
-     * not simulated-lost) and its payload was written to disk.
+     * Registra que um pacote foi aceito pela FSM GBN (ordem correta,
+     * não foi simulado como perdido) e seu payload foi escrito em disco.
      *
-     * <p>Should always be called together with {@link #recordPacketReceived()}.
+     * <p>Deve ser sempre chamado junto com {@link #recordPacketReceived()}.
      */
     public void recordPacketAccepted() {
         totalAccepted.incrementAndGet();
     }
 
     /**
-     * Registers that a packet was discarded — either because it arrived out of
-     * order (GBN policy) or because it was chosen for simulated loss.
+     * Registra que um pacote foi descartado — seja porque chegou fora de
+     * ordem (política GBN) ou porque foi escolhido para perda simulada.
      *
-     * <p>Should always be called together with {@link #recordPacketReceived()}.
+     * <p>Deve ser sempre chamado junto com {@link #recordPacketReceived()}.
      */
     public void recordPacketDiscarded() {
         totalDiscarded.incrementAndGet();
     }
 
     /**
-     * Registers that an ACK datagram was sent back to the sender.
-     * Called once per accepted packet (not per retransmitted packet on the
-     * sender side).
+     * Registra que um datagrama ACK foi enviado de volta ao transmissor.
+     * Chamado uma vez por pacote aceito (não por pacote retransmitido no
+     * lado do transmissor).
      */
     public void recordAckSent() {
         totalAcksSent.incrementAndGet();
     }
 
     // -------------------------------------------------------------------------
-    // Snapshot
+    // Instantâneo
     // -------------------------------------------------------------------------
 
     /**
-     * Returns an immutable point-in-time snapshot of all counters.
+     * Retorna um instantâneo imutável de todos os contadores em um ponto específico no tempo.
      *
-     * <p>The snapshot captures the current values atomically with respect to
-     * each individual counter, but not across all counters simultaneously.
-     * For the final report — called after the session is closed — this is
-     * sufficient.
+     * <p>O instantâneo captura os valores atuais atomicamente em relação a
+     * cada contador individual, mas não em todos os contadores simultaneamente.
+     * Para o relatório final — chamado após a sessão ser fechada — isso é
+     * suficiente.
      *
-     * @return a new {@link Snapshot} with current counter values
+     * @return um novo {@link Snapshot} com os valores atuais dos contadores
      */
     public Snapshot snapshot() {
         return new Snapshot(
@@ -96,14 +96,15 @@ public final class ReceiverStatistics {
     }
 
     // -------------------------------------------------------------------------
-    // Snapshot record
+    // Registro de instantâneo
     // -------------------------------------------------------------------------
 
     /**
-     * Immutable, point-in-time view of the statistics at a given moment.
+     * Visão imutável e pontual das estatísticas em um determinado momento.
      *
-     * <p>Consumers (report printers, unit tests) work against this type so they
-     * are never affected by concurrent updates to the live counters.
+     * <p>Os consumidores (impressores de relatórios, testes unitários) trabalham
+     * com este tipo para que nunca sejam afetados por atualizações concorrentes
+     * nos contadores ao vivo.
      */
     public static final class Snapshot {
 
@@ -120,38 +121,38 @@ public final class ReceiverStatistics {
             this.totalAcksSent  = totalAcksSent;
         }
 
-        /** @return total DATA datagrams that arrived at the socket */
+        /** @return total de datagramas DATA que chegaram ao socket */
         public long getTotalReceived() {
             return totalReceived;
         }
 
-        /** @return packets accepted by the FSM and written to disk */
+        /** @return pacotes aceitos pela FSM e escritos em disco */
         public long getTotalAccepted() {
             return totalAccepted;
         }
 
         /**
-         * @return packets discarded — out-of-order (GBN) plus simulated losses.
-         *         The assignment specifies that only in-order packets are
-         *         subject to loss simulation, so the split can be tracked by the
-         *         FSM via separate calls if needed in a future iteration.
+         * @return pacotes descartados — fora de ordem (GBN) mais perdas simuladas.
+         *         A especificação determina que apenas pacotes em ordem estão
+         *         sujeitos à simulação de perda, então a divisão pode ser rastreada
+         *         pela FSM através de chamadas separadas, se necessário em uma iteração futura.
          */
         public long getTotalDiscarded() {
             return totalDiscarded;
         }
 
-        /** @return ACK datagrams sent back to the sender */
+        /** @return datagramas ACK enviados de volta ao transmissor */
         public long getTotalAcksSent() {
             return totalAcksSent;
         }
 
         /**
-         * Computes the effective loss rate as a value in {@code [0.0, 1.0]}.
+         * Calcula a taxa de perda efetiva como um valor em {@code [0.0, 1.0]}.
          *
-         * <p>Returns {@code 0.0} if no packets have been received yet, to avoid
-         * division by zero.
+         * <p>Retorna {@code 0.0} se nenhum pacote tiver sido recebido ainda, para evitar
+         * divisão por zero.
          *
-         * @return {@code totalDiscarded / totalReceived}, or {@code 0.0} if
+         * @return {@code totalDiscarded / totalReceived}, ou {@code 0.0} se
          *         {@code totalReceived == 0}
          */
         public double effectiveLossRate() {

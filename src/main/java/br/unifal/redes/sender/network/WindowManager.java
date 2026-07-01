@@ -1,45 +1,45 @@
 package br.unifal.redes.sender.network;
 
 /**
- * Maintains the state of the Go-Back-N sender's sliding window.
+ * Mantém o estado da janela deslizante do transmissor Go-Back-N.
  *
- * <p>This class is a pure protocol-state component. It tracks the base
- * sequence number, the next sequence number to be assigned, and the
- * configured window size, and exposes the operations the sender's FSM needs
- * to decide when it may send, when it must wait, and how to slide the
- * window forward as cumulative ACKs arrive.
+ * <p>Esta classe é um componente puro de estado de protocolo. Ela rastreia o número
+ * de sequência base, o próximo número de sequência a ser atribuído e o
+ * tamanho de janela configurado, e expõe as operações que a FSM do transmissor
+ * precisa para decidir quando pode enviar, quando deve esperar e como deslizar a
+ * janela para frente conforme os ACKs cumulativos chegam.
  *
- * <p>This class performs no network I/O, no file I/O, no timing, and no
- * retransmission logic. It does not know what a packet looks like on the
- * wire — it only reasons about sequence numbers as integers.
+ * <p>Esta classe não realiza E/S de rede, E/S de arquivo, temporização ou
+ * lógica de retransmissão. Ela não sabe como um pacote se parece no
+ * cabo — ela raciocina apenas sobre números de sequência como inteiros.
  *
- * <p>Thread-safety: this class is not synchronized. It is intended to be
- * owned and driven by a single sender FSM thread; callers that need
- * concurrent access must coordinate externally.
+ * <p>Segurança de thread: esta classe não é sincronizada. Ela é destinada a ser
+ * de propriedade e conduzida por uma única thread da FSM do transmissor; chamadores que
+ * precisam de acesso concorrente devem coordenar externamente.
  */
 public final class WindowManager {
 
     private final int windowSize;
 
     /**
-     * Sequence number of the oldest packet sent but not yet acknowledged.
-     * Initialized to 0 per GBN convention (base = 0).
+     * Número de sequência do pacote mais antigo enviado, mas ainda não reconhecido.
+     * Inicializado como 0 conforme a convenção GBN (base = 0).
      */
     private int base;
 
     /**
-     * Sequence number that will be assigned to the next packet sent.
-     * Initialized to 0 per GBN convention (nextseqnum = 0).
+     * Número de sequência que será atribuído ao próximo pacote enviado.
+     * Inicializado como 0 conforme a convenção GBN (nextseqnum = 0).
      */
     private int next;
 
     /**
-     * Creates a new window manager with the given window size, starting the
-     * base and next sequence numbers at {@code 0}.
+     * Cria um novo gerenciador de janela com o tamanho de janela informado,
+     * iniciando os números de sequência base e próximo em {@code 0}.
      *
-     * @param windowSize the maximum number of unacknowledged packets allowed
-     *                   in flight at once; must be &gt; 0
-     * @throws IllegalArgumentException if {@code windowSize} is not positive
+     * @param windowSize o número máximo de pacotes não confirmados permitidos
+     *                   em trânsito simultaneamente; deve ser &gt; 0
+     * @throws IllegalArgumentException se {@code windowSize} não for positivo
      */
     public WindowManager(int windowSize) {
         this(windowSize, 0);
@@ -68,11 +68,11 @@ public final class WindowManager {
      */
     public WindowManager(int windowSize, int initialSequenceNumber) {
         if (windowSize <= 0) {
-            throw new IllegalArgumentException("windowSize must be > 0, got: " + windowSize);
+            throw new IllegalArgumentException("windowSize deve ser > 0, recebido: " + windowSize);
         }
         if (initialSequenceNumber < 0) {
             throw new IllegalArgumentException(
-                    "initialSequenceNumber must be >= 0, got: " + initialSequenceNumber);
+                    "initialSequenceNumber deve ser >= 0, recebido: " + initialSequenceNumber);
         }
         this.windowSize = windowSize;
         this.base = initialSequenceNumber;
@@ -80,56 +80,56 @@ public final class WindowManager {
     }
 
     // -------------------------------------------------------------------------
-    // Window queries
+    // Consultas da janela
     // -------------------------------------------------------------------------
 
     /**
-     * Indicates whether the window currently has room to send another packet.
+     * Indica se a janela atualmente tem espaço para enviar outro pacote.
      *
-     * @return {@code true} if {@link #getInFlightCount()} is strictly less
-     *         than the configured window size
+     * @return {@code true} se {@link #getInFlightCount()} for estritamente menor
+     *         que o tamanho de janela configurado
      */
     public boolean canSend() {
         return getInFlightCount() < windowSize;
     }
 
     /**
-     * Indicates whether the window is at full capacity.
+     * Indica se a janela está em capacidade total.
      *
-     * @return {@code true} if no more packets may be sent without first
-     *         sliding the window forward; equivalent to {@code !canSend()}
+     * @return {@code true} se nenhum pacote adicional puder ser enviado sem primeiro
+     *         deslizar a janela para frente; equivalente a {@code !canSend()}
      */
     public boolean isFull() {
         return !canSend();
     }
 
     /**
-     * @return the number of packets currently in flight (sent but not yet
-     *         acknowledged), i.e. {@code next - base}
+     * @return o número de pacotes atualmente em trânsito (enviados mas ainda não
+     *         reconhecidos), ou seja, {@code next - base}
      */
     public int getInFlightCount() {
         return next - base;
     }
 
     // -------------------------------------------------------------------------
-    // FSM-facing mutators
+    // Mutadores voltados para a FSM
     // -------------------------------------------------------------------------
 
     /**
-     * Records that a packet was logically sent, consuming and returning the
-     * current next-sequence-number, then advancing it by one.
+     * Registra que um pacote foi logicamente enviado, consumindo e retornando o
+     * número de sequência atual, e então avançando-o em uma unidade.
      *
-     * <p>Callers should check {@link #canSend()} before invoking this method;
-     * it does not block or wait, it only enforces the invariant defensively.
+     * <p>Os chamadores devem verificar {@link #canSend()} antes de invocar este método;
+     * ele não bloqueia nem espera, apenas aplica o invariante de forma defensiva.
      *
-     * @return the sequence number assigned to the packet that was just sent
-     * @throws IllegalStateException if the window is already full
+     * @return o número de sequência atribuído ao pacote que acabou de ser enviado
+     * @throws IllegalStateException se a janela já estiver cheia
      */
     public int packetSent() {
         if (isFull()) {
             throw new IllegalStateException(
-                    "Cannot send: window is full (inFlight=" + getInFlightCount()
-                            + ", windowSize=" + windowSize + ")");
+                    "Não é possível enviar: janela cheia (emTrânsito=" + getInFlightCount()
+                            + ", tamanhoJanela=" + windowSize + ")");
         }
         int assignedSequenceNumber = next;
         next++;
@@ -137,58 +137,58 @@ public final class WindowManager {
     }
 
     /**
-     * Slides the window forward in response to a cumulative ACK.
+     * Desliza a janela para frente em resposta a um ACK cumulativo.
      *
-     * <p>{@code ackSequenceNumber} is interpreted using standard GBN
-     * cumulative-ACK semantics: it confirms that every packet with a sequence
-     * number up to and including {@code ackSequenceNumber} has been
-     * delivered. The new base becomes {@code ackSequenceNumber + 1}.
+     * <p>{@code ackSequenceNumber} é interpretado usando a semântica padrão
+     * de ACK cumulativo do GBN: ele confirma que todos os pacotes com um número
+     * de sequência até e incluindo {@code ackSequenceNumber} foram
+     * entregues. A nova base torna-se {@code ackSequenceNumber + 1}.
      *
-     * <p>Stale or duplicate ACKs — where {@code ackSequenceNumber + 1} does
-     * not move the base strictly forward — are silently ignored, since
-     * receiving duplicate ACKs is normal, expected behavior in Go-Back-N and
-     * should not be treated as an error.
+     * <p>ACKs desatualizados ou duplicados — onde {@code ackSequenceNumber + 1}
+     * não move a base estritamente para frente — são silenciosamente ignorados,
+     * pois receber ACKs duplicados é um comportamento normal e esperado no
+     * Go-Back-N e não deve ser tratado como erro.
      *
-     * @param ackSequenceNumber the highest sequence number being
-     *                          cumulatively acknowledged; must be &gt;= 0
-     * @throws IllegalArgumentException if {@code ackSequenceNumber} is
-     *                                   negative, or if it acknowledges a
-     *                                   sequence number that was never sent
-     *                                   (i.e. {@code ackSequenceNumber >= next})
+     * @param ackSequenceNumber o maior número de sequência sendo
+     *                          reconhecido cumulativamente; deve ser &gt;= 0
+     * @throws IllegalArgumentException se {@code ackSequenceNumber} for
+     *                                   negativo, ou se ele reconhecer um
+     *                                   número de sequência que nunca foi enviado
+     *                                   (ou seja, {@code ackSequenceNumber >= next})
      */
     public void processAck(int ackSequenceNumber) {
         if (ackSequenceNumber < 0) {
             throw new IllegalArgumentException(
-                    "ackSequenceNumber must be >= 0, got: " + ackSequenceNumber);
+                    "ackSequenceNumber deve ser >= 0, recebido: " + ackSequenceNumber);
         }
         if (ackSequenceNumber >= next) {
             throw new IllegalArgumentException(
                     "ackSequenceNumber (" + ackSequenceNumber
-                            + ") acknowledges a sequence number never sent (next=" + next + ")");
+                            + ") reconhece um número de sequência nunca enviado (next=" + next + ")");
         }
 
         int newBase = ackSequenceNumber + 1;
         if (newBase <= base) {
-            return; // stale or duplicate ACK — normal in GBN, no-op
+            return; // ACK desatualizado ou duplicado — normal em GBN, sem efeito
         }
         base = newBase;
     }
 
     // -------------------------------------------------------------------------
-    // Accessors
+    // Acessores
     // -------------------------------------------------------------------------
 
-    /** @return the current base sequence number (oldest unacknowledged packet) */
+    /** @return o número de sequência base atual (pacote não reconhecido mais antigo) */
     public int getBaseSequenceNumber() {
         return base;
     }
 
-    /** @return the sequence number that will be assigned to the next packet sent */
+    /** @return o número de sequência que será atribuído ao próximo pacote enviado */
     public int getNextSequenceNumber() {
         return next;
     }
 
-    /** @return the configured maximum number of unacknowledged packets in flight */
+    /** @return o número máximo configurado de pacotes não reconhecidos em trânsito */
     public int getWindowSize() {
         return windowSize;
     }

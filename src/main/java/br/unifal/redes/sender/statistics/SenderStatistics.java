@@ -3,17 +3,17 @@ package br.unifal.redes.sender.statistics;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Accumulates protocol-level event counters for a single transmission session.
+ * Acumula contadores de eventos em nível de protocolo para uma única sessão de transmissão.
  *
- * <p>Consumers register discrete events via the {@code record*()} methods.
- * No output is produced here; formatting and printing are the responsibility
- * of higher-level components that call {@link #snapshot()}.
+ * <p>Os consumidores registram eventos discretos através dos métodos {@code record*()}.
+ * Nenhuma saída é produzida aqui; formatação e impressão são responsabilidade
+ * de componentes de nível superior que chamam {@link #snapshot()}.
  *
- * <p>All counters are backed by {@link AtomicLong} so that concurrent
- * sender threads (e.g. the packet-sending loop and the ACK-listening loop)
- * may safely register events without external synchronization.
+ * <p>Todos os contadores são suportados por {@link AtomicLong} para que threads
+ * concorrentes do transmissor (por exemplo, o loop de envio de pacotes e o loop de
+ * escuta de ACKs) possam registrar eventos com segurança sem sincronização externa.
  *
- * <p>Usage pattern expected by the FSM:
+ * <p>Padrão de uso esperado pela FSM:
  * <pre>{@code
  *   statistics.recordPacketSent();
  *   statistics.recordBytesSent(payload.length);
@@ -34,77 +34,77 @@ public final class SenderStatistics {
     private final AtomicLong totalBytesSent      = new AtomicLong(0);
 
     // -------------------------------------------------------------------------
-    // Event registration
+    // Registro de eventos
     // -------------------------------------------------------------------------
 
     /**
-     * Registers that a data packet was handed off to the socket for
-     * transmission. Must be called once for every DATA datagram sent,
-     * including retransmissions — use {@link #recordRetransmission()} in
-     * addition to this method to distinguish the two.
+     * Registra que um pacote de dados foi entregue ao socket para
+     * transmissão. Deve ser chamado uma vez para cada datagrama DATA enviado,
+     * incluindo retransmissões — use {@link #recordRetransmission()} em
+     * adição a este método para distinguir os dois.
      */
     public void recordPacketSent() {
         totalPacketsSent.incrementAndGet();
     }
 
     /**
-     * Registers that a previously sent packet was retransmitted, e.g. as a
-     * result of a timeout in a Go-Back-N retransmission burst.
+     * Registra que um pacote enviado anteriormente foi retransmitido, por exemplo, como
+     * resultado de um timeout em um burst de retransmissão Go-Back-N.
      *
-     * <p>Should be called together with {@link #recordPacketSent()}, since a
-     * retransmission is still a packet sent on the wire.
+     * <p>Deve ser chamado junto com {@link #recordPacketSent()}, pois uma
+     * retransmissão ainda é um pacote enviado na rede.
      */
     public void recordRetransmission() {
         totalRetransmitted.incrementAndGet();
     }
 
     /**
-     * Registers that an ACK datagram was received from the receiver,
-     * regardless of whether it advanced the send window (duplicate ACKs
-     * still count, since this method only tracks arrival, not effect).
+     * Registra que um datagrama ACK foi recebido do receptor,
+     * independentemente de ter avançado a janela de envio (ACKs duplicados
+     * ainda contam, pois este método rastreia apenas a chegada, não o efeito).
      */
     public void recordAckReceived() {
         totalAcksReceived.incrementAndGet();
     }
 
     /**
-     * Registers that the retransmission timer expired without a
-     * corresponding ACK arriving in time.
+     * Registra que o temporizador de retransmissão expirou sem que um
+     * ACK correspondente chegasse a tempo.
      */
     public void recordTimeout() {
         totalTimeouts.incrementAndGet();
     }
 
     /**
-     * Registers {@code byteCount} payload bytes as having been sent on the wire.
+     * Registra {@code byteCount} bytes de payload como tendo sido enviados na rede.
      *
-     * <p>Should be called together with {@link #recordPacketSent()} for every
-     * transmission, including retransmissions, so that {@code totalBytesSent}
-     * reflects actual network usage rather than unique file bytes.
+     * <p>Deve ser chamado junto com {@link #recordPacketSent()} para cada
+     * transmissão, incluindo retransmissões, para que {@code totalBytesSent}
+     * reflita o uso real da rede em vez de bytes únicos do arquivo.
      *
-     * @param byteCount the number of payload bytes sent; must be &gt;= 0
-     * @throws IllegalArgumentException if {@code byteCount} is negative
+     * @param byteCount o número de bytes de payload enviados; deve ser &gt;= 0
+     * @throws IllegalArgumentException se {@code byteCount} for negativo
      */
     public void recordBytesSent(long byteCount) {
         if (byteCount < 0) {
-            throw new IllegalArgumentException("byteCount must be >= 0, got: " + byteCount);
+            throw new IllegalArgumentException("byteCount deve ser >= 0, recebido: " + byteCount);
         }
         totalBytesSent.addAndGet(byteCount);
     }
 
     // -------------------------------------------------------------------------
-    // Snapshot
+    // Instantâneo
     // -------------------------------------------------------------------------
 
     /**
-     * Returns an immutable point-in-time snapshot of all counters.
+     * Retorna um instantâneo imutável de todos os contadores em um ponto específico no tempo.
      *
-     * <p>The snapshot captures the current values atomically with respect to
-     * each individual counter, but not across all counters simultaneously.
-     * For the final report — called after the session is closed — this is
-     * sufficient.
+     * <p>O instantâneo captura os valores atuais atomicamente em relação a
+     * cada contador individual, mas não em todos os contadores simultaneamente.
+     * Para o relatório final — chamado após a sessão ser fechada — isso é
+     * suficiente.
      *
-     * @return a new {@link Snapshot} with current counter values
+     * @return um novo {@link Snapshot} com os valores atuais dos contadores
      */
     public Snapshot snapshot() {
         return new Snapshot(
@@ -117,14 +117,15 @@ public final class SenderStatistics {
     }
 
     // -------------------------------------------------------------------------
-    // Snapshot record
+    // Registro de instantâneo
     // -------------------------------------------------------------------------
 
     /**
-     * Immutable, point-in-time view of the statistics at a given moment.
+     * Visão imutável e pontual das estatísticas em um determinado momento.
      *
-     * <p>Consumers (report printers, unit tests) work against this type so they
-     * are never affected by concurrent updates to the live counters.
+     * <p>Os consumidores (impressores de relatórios, testes unitários) trabalham
+     * com este tipo para que nunca sejam afetados por atualizações concorrentes
+     * nos contadores ao vivo.
      */
     public static final class Snapshot {
 
@@ -144,39 +145,39 @@ public final class SenderStatistics {
             this.totalBytesSent     = totalBytesSent;
         }
 
-        /** @return total DATA datagrams sent on the wire, including retransmissions */
+        /** @return total de datagramas DATA enviados na rede, incluindo retransmissões */
         public long getTotalPacketsSent() {
             return totalPacketsSent;
         }
 
-        /** @return packets sent again after a timeout (subset of {@link #getTotalPacketsSent()}) */
+        /** @return pacotes reenviados após um timeout (subconjunto de {@link #getTotalPacketsSent()}) */
         public long getTotalRetransmitted() {
             return totalRetransmitted;
         }
 
-        /** @return ACK datagrams received from the receiver */
+        /** @return datagramas ACK recebidos do receptor */
         public long getTotalAcksReceived() {
             return totalAcksReceived;
         }
 
-        /** @return number of times the retransmission timer expired */
+        /** @return número de vezes que o temporizador de retransmissão expirou */
         public long getTotalTimeouts() {
             return totalTimeouts;
         }
 
-        /** @return total payload bytes sent on the wire, including retransmissions */
+        /** @return total de bytes de payload enviados na rede, incluindo retransmissões */
         public long getTotalBytesSent() {
             return totalBytesSent;
         }
 
         /**
-         * Computes the retransmission rate as a value in {@code [0.0, 1.0]}.
+         * Calcula a taxa de retransmissão como um valor em {@code [0.0, 1.0]}.
          *
-         * <p>Returns {@code 0.0} if no packets have been sent yet, to avoid
-         * division by zero.
+         * <p>Retorna {@code 0.0} se nenhum pacote tiver sido enviado ainda, para evitar
+         * divisão por zero.
          *
-         * @return {@code totalRetransmitted / totalPacketsSent}, or {@code 0.0}
-         *         if {@code totalPacketsSent == 0}
+         * @return {@code totalRetransmitted / totalPacketsSent}, ou {@code 0.0}
+         *         se {@code totalPacketsSent == 0}
          */
         public double retransmissionRate() {
             if (totalPacketsSent == 0) return 0.0;

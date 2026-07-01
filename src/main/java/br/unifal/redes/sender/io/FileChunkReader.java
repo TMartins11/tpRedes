@@ -10,65 +10,65 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Reads a source file from disk and splits its contents into fixed-size,
- * ordered byte chunks.
+ * Lê um arquivo fonte do disco e divide seu conteúdo em pedaços (chunks) de bytes
+ * de tamanho fixo e ordenados.
  *
- * <p>This class knows nothing about the GBN protocol, packets, sequence
- * numbers, sockets, or any form of network I/O. Its contract is simple:
+ * <p>Esta classe não sabe nada sobre o protocolo GBN, pacotes, números
+ * de sequência, soquetes ou qualquer forma de E/S de rede. Seu contrato é simples:
  * <pre>
- *   File -&gt; Bytes -&gt; Chunks
+ *   Arquivo -&gt; Bytes -&gt; Pedaços (Chunks)
  * </pre>
  *
- * <p>Chunks are returned in the exact order they appear in the source file.
- * Every chunk has a length equal to the configured chunk size, except
- * possibly the last one, which may be shorter if the file size is not an
- * exact multiple of the chunk size. Interpreting, numbering, or transmitting
- * these chunks is the responsibility of higher-level components (e.g. the
- * Sender's FSM).
+ * <p>Os pedaços são retornados na ordem exata em que aparecem no arquivo fonte.
+ * Cada pedaço tem um comprimento igual ao tamanho de pedaço configurado, exceto
+ * possivelmente o último, que pode ser mais curto se o tamanho do arquivo não for
+ * um múltiplo exato do tamanho do pedaço. Interpretar, numerar ou transmitir
+ * esses pedaços é responsabilidade de componentes de nível superior (por exemplo, a
+ * FSM do Transmissor).
  *
- * <p>This class is stateless aside from its immutable chunk size and may be
- * reused to read multiple files sequentially. It is not thread-safe for
- * concurrent reads of the same instance, though concurrent reads of
- * different files from separate threads are safe since no shared mutable
- * state is involved.
+ * <p>Esta classe não possui estado, além do tamanho imutável do pedaço, e pode ser
+ * reutilizada para ler múltiplos arquivos sequencialmente. Não é thread-safe para
+ * leituras concorrentes da mesma instância, embora leituras concorrentes de
+ * diferentes arquivos a partir de threads separadas sejam seguras, pois nenhum
+ * estado mutável compartilhado está envolvido.
  */
 public final class FileChunkReader {
 
     private final int chunkSize;
 
     /**
-     * Creates a new reader that splits files into chunks of {@code chunkSize} bytes.
+     * Cria um novo leitor que divide arquivos em pedaços de {@code chunkSize} bytes.
      *
-     * @param chunkSize the maximum size, in bytes, of each chunk; must be &gt; 0
-     * @throws IllegalArgumentException if {@code chunkSize} is not positive
+     * @param chunkSize o tamanho máximo, em bytes, de cada pedaço; deve ser &gt; 0
+     * @throws IllegalArgumentException se {@code chunkSize} não for positivo
      */
     public FileChunkReader(int chunkSize) {
         if (chunkSize <= 0) {
-            throw new IllegalArgumentException("chunkSize must be > 0, got: " + chunkSize);
+            throw new IllegalArgumentException("chunkSize deve ser > 0, recebido: " + chunkSize);
         }
         this.chunkSize = chunkSize;
     }
 
     // -------------------------------------------------------------------------
-    // Reading
+    // Leitura
     // -------------------------------------------------------------------------
 
     /**
-     * Reads {@code sourceFile} in full and splits it into ordered chunks of at
-     * most {@link #getChunkSize()} bytes each.
+     * Lê {@code sourceFile} por completo e o divide em pedaços ordenados de no
+     * máximo {@link #getChunkSize()} bytes cada.
      *
-     * <p>The returned list preserves the original byte order of the file: the
-     * first chunk contains the first {@code chunkSize} bytes, the second chunk
-     * the next {@code chunkSize} bytes, and so on. Only the final chunk may be
-     * shorter than {@code chunkSize}, if the file size is not an exact
-     * multiple of it. If the file is empty, an empty list is returned.
+     * <p>A lista retornada preserva a ordem original dos bytes do arquivo: o
+     * primeiro pedaço contém os primeiros {@code chunkSize} bytes, o segundo pedaço
+     * os próximos {@code chunkSize} bytes, e assim por diante. Apenas o pedaço final
+     * pode ser mais curto que {@code chunkSize}, se o tamanho do arquivo não for um
+     * múltiplo exato dele. Se o arquivo estiver vazio, uma lista vazia é retornada.
      *
-     * @param sourceFile path to the file to read; must not be {@code null}
-     * @return an immutable, ordered list of byte chunks
-     * @throws NullPointerException     if {@code sourceFile} is {@code null}
-     * @throws IllegalArgumentException if {@code sourceFile} does not exist,
-     *                                   is not a regular file, or is not readable
-     * @throws IOException              if an I/O error occurs while reading
+     * @param sourceFile caminho para o arquivo a ser lido; não deve ser {@code null}
+     * @return uma lista imutável e ordenada de pedaços de bytes
+     * @throws NullPointerException     se {@code sourceFile} for {@code null}
+     * @throws IllegalArgumentException se {@code sourceFile} não existir,
+     *                                   não for um arquivo regular ou não for legível
+     * @throws IOException              se ocorrer um erro de E/S durante a leitura
      */
     public List<byte[]> readChunks(Path sourceFile) throws IOException {
         validateSourceFile(sourceFile);
@@ -80,11 +80,11 @@ public final class FileChunkReader {
             while (true) {
                 int bytesRead = readFully(in, buffer);
                 if (bytesRead == 0) {
-                    break; // end of file, nothing left to read
+                    break; // fim do arquivo, nada mais para ler
                 }
                 chunks.add(bytesRead == chunkSize ? buffer.clone() : Arrays.copyOf(buffer, bytesRead));
                 if (bytesRead < chunkSize) {
-                    break; // short read means end of file was reached
+                    break; // leitura curta significa que o fim do arquivo foi alcançado
                 }
             }
         }
@@ -93,43 +93,43 @@ public final class FileChunkReader {
     }
 
     // -------------------------------------------------------------------------
-    // Accessors
+    // Acessores
     // -------------------------------------------------------------------------
 
-    /** @return the configured chunk size, in bytes */
+    /** @return o tamanho do pedaço configurado, em bytes */
     public int getChunkSize() {
         return chunkSize;
     }
 
     // -------------------------------------------------------------------------
-    // Helpers
+    // Métodos auxiliares
     // -------------------------------------------------------------------------
 
     private static void validateSourceFile(Path sourceFile) {
-        Objects.requireNonNull(sourceFile, "sourceFile must not be null");
+        Objects.requireNonNull(sourceFile, "sourceFile não deve ser nulo");
         if (!Files.exists(sourceFile)) {
-            throw new IllegalArgumentException("sourceFile does not exist: " + sourceFile);
+            throw new IllegalArgumentException("sourceFile não existe: " + sourceFile);
         }
         if (!Files.isRegularFile(sourceFile)) {
-            throw new IllegalArgumentException("sourceFile is not a regular file: " + sourceFile);
+            throw new IllegalArgumentException("sourceFile não é um arquivo regular: " + sourceFile);
         }
         if (!Files.isReadable(sourceFile)) {
-            throw new IllegalArgumentException("sourceFile is not readable: " + sourceFile);
+            throw new IllegalArgumentException("sourceFile não é legível: " + sourceFile);
         }
     }
 
     /**
-     * Reads from {@code in} until {@code buffer} is completely filled or the
-     * end of the stream is reached, whichever happens first.
+     * Lê de {@code in} até que {@code buffer} esteja completamente preenchido ou o
+     * final do fluxo seja alcançado, o que ocorrer primeiro.
      *
-     * <p>This is necessary because a single {@link InputStream#read(byte[])}
-     * call is not guaranteed to fill the buffer even when more bytes remain
-     * available, so chunk boundaries must be assembled defensively.
+     * <p>Isso é necessário porque uma única chamada {@link InputStream#read(byte[])}
+     * não garante preencher o buffer mesmo quando mais bytes permanecem
+     * disponíveis, portanto os limites dos pedaços devem ser montados de forma defensiva.
      *
-     * @param in     the stream to read from
-     * @param buffer the buffer to fill
-     * @return the number of bytes actually read into {@code buffer} (may be
-     *         less than {@code buffer.length} only at end of file)
+     * @param in     o fluxo do qual ler
+     * @param buffer o buffer a ser preenchido
+     * @return o número de bytes efetivamente lidos em {@code buffer} (pode ser
+     *         menor que {@code buffer.length} apenas no final do arquivo)
      */
     private static int readFully(InputStream in, byte[] buffer) throws IOException {
         int totalRead = 0;
