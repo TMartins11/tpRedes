@@ -8,6 +8,8 @@ import br.unifal.redes.receiver.network.AckSender;
 import br.unifal.redes.receiver.network.IncomingPacket;
 import br.unifal.redes.receiver.network.PacketReceiver;
 import br.unifal.redes.receiver.session.ReceiverSession;
+import br.unifal.redes.receiver.statistics.ReceiverStatistics;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Objects;
@@ -19,8 +21,9 @@ import java.util.Random;
  * <p>Esta classe é o único componente do lado receptor que conhece o fluxo
  * completo do protocolo. Ela orquestra todos os demais componentes
  * especializados — {@link PacketReceiver}, {@link AckSender},
- * {@link FileWriterService} e {@link ReceiverSession} — exatamente como
- * o {@code SenderFSM} orquestra os componentes do lado emissor.
+ * {@link FileWriterService}, {@link ReceiverSession} e
+ * {@link ReceiverStatistics} — exatamente como o {@code SenderFSM}
+ * orquestra os componentes do lado emissor.
  *
  * <h2>Fluxo geral da recepção</h2>
  * <ol>
@@ -43,12 +46,12 @@ import java.util.Random;
  *   <li><strong>Handler DATA — política GBN:</strong>
  *       <ul>
  *         <li>Pacote em ordem, não simulado como perdido → grava payload em
- *             disco, avança {@code expectedSeqNum}, envia ACK cumulativo.</li>
+ *             disco, avança {@code expectedSeqNum}, envia ACK cumulativo,
+ *             contabiliza aceitação nas estatísticas.</li>
  *         <li>Pacote em ordem, simulado como perdido → descartado sem ACK;
- *             o Emissor retransmitirá ao expirar o timeout.</li>
+ *             contabiliza descarte nas estatísticas.</li>
  *         <li>Pacote fora de ordem → descartado; reenvia o último ACK
- *             confirmado (se houver), informando ao Emissor qual foi o
- *             último segmento aceito.</li>
+ *             confirmado (se houver); contabiliza descarte nas estatísticas.</li>
  *       </ul></li>
  *   <li><strong>Handler FIN:</strong> fecha o {@link FileWriterService}
  *       (garantindo flush dos buffers em disco), envia ACK(finSeqNum) ao
@@ -56,6 +59,12 @@ import java.util.Random;
  *   <li><strong>Pacotes inesperados</strong> (ACK, HANDSHAKE duplicado):
  *       descartados silenciosamente sem alterar o estado da sessão.</li>
  * </ol>
+ *
+ * <h2>Estatísticas</h2>
+ * <p>{@link ReceiverStatistics} é passado como parâmetro de {@link #executar}
+ * e retornado como {@link ReceiverStatistics.Snapshot} ao final, permitindo
+ * que o bootstrap ({@code Receiver}) exiba o relatório final sem precisar
+ * conhecer os detalhes internos da FSM.
  *
  * <h2>Simulação de perda de pacotes</h2>
  * <p>Conforme Seção 4 do enunciado, a simulação atua <em>somente</em> sobre
@@ -112,6 +121,9 @@ public final class GbnReceiverFsm {
      *   <li>{@code fileWriter} deve estar criado mas ainda não aberto —
      *       esta FSM chama {@link FileWriterService#open(String)} internamente
      *       após receber o HANDSHAKE.</li>
+     *   <li>{@code estatisticas} deve estar criado e zerado — esta FSM
+     *       acumula os eventos e o chamador usa o snapshot retornado para
+     *       exibir o relatório final.</li>
      * </ul>
      *
      * @param packetReceiver componente de recepção de datagramas UDP;
@@ -120,18 +132,23 @@ public final class GbnReceiverFsm {
      *                       não pode ser {@code null}
      * @param fileWriter     serviço de escrita do arquivo recebido,
      *                       ainda não aberto; não pode ser {@code null}
+     * @param estatisticas   coletor de estatísticas da sessão;
+     *                       não pode ser {@code null}
+     * @return retrato imutável das estatísticas acumuladas durante a sessão
      * @throws NullPointerException se qualquer parâmetro for {@code null}
      * @throws IOException          se ocorrer falha irrecuperável de rede
      *                               durante o HANDSHAKE ou a recepção de
      *                               pacotes, ou falha ao abrir/escrever/
      *                               fechar o arquivo de destino
      */
-    public void executar(PacketReceiver packetReceiver,
-                         AckSender ackSender,
-                         FileWriterService fileWriter) throws IOException {
+    public ReceiverStatistics.Snapshot executar(PacketReceiver packetReceiver,
+                                                AckSender ackSender,
+                                                FileWriterService fileWriter,
+                                                ReceiverStatistics estatisticas) throws IOException {
         Objects.requireNonNull(packetReceiver, "packetReceiver não pode ser nulo");
         Objects.requireNonNull(ackSender,      "ackSender não pode ser nulo");
         Objects.requireNonNull(fileWriter,     "fileWriter não pode ser nulo");
+        Objects.requireNonNull(estatisticas,   "estatisticas não pode ser nulo");
 
         // Fase 1 — HANDSHAKE.
         // Bloqueia até o HANDSHAKE chegar, inicializa todos os componentes,
@@ -141,7 +158,12 @@ public final class GbnReceiverFsm {
         // Fase 2 — Loop principal de DATA + FIN.
         // Retorna apenas quando sessao.isReceiving() se tornar false,
         // o que ocorre após o handler do FIN chamar sessao.close().
-        executarLoopPrincipal(sessao, packetReceiver, ackSender, fileWriter);
+        executarLoopPrincipal(sessao, packetReceiver, ackSender, fileWriter, estatisticas);
+
+        // Retorna o snapshot final das estatísticas para que o bootstrap
+        // (Receiver.java) possa exibir o relatório sem conhecer os internos
+        // da FSM.
+        return estatisticas.snapshot();
     }
 
     // -------------------------------------------------------------------------
@@ -233,7 +255,7 @@ public final class GbnReceiverFsm {
         ReceiverSession sessao =
                 ReceiverSession.open(params, params.getDestPath());
 
-        System.out.println("[FSM] 8 - Sessão criada");
+        System.out.println("[FSM] 8 - Sessao criada");
 
         ackSender.sendAck(0, enderecoEmissor, portaEmissor);
 
@@ -271,12 +293,14 @@ public final class GbnReceiverFsm {
      * @param packetReceiver componente de recepção de datagramas
      * @param ackSender      componente de envio de ACKs
      * @param fileWriter     serviço de escrita em disco (já aberto)
+     * @param estatisticas   coletor de estatísticas da sessão
      * @throws IOException se ocorrer erro irrecuperável de rede ou de disco
      */
     private void executarLoopPrincipal(ReceiverSession sessao,
                                        PacketReceiver packetReceiver,
                                        AckSender ackSender,
-                                       FileWriterService fileWriter) throws IOException {
+                                       FileWriterService fileWriter,
+                                       ReceiverStatistics estatisticas) throws IOException {
         // Endereço do Emissor — atualizado a cada IncomingPacket recebido.
         InetAddress enderecoEmissor = null;
         int portaEmissor = 0;
@@ -293,7 +317,7 @@ public final class GbnReceiverFsm {
             switch (pacote.getType()) {
                 case DATA ->
                         tratarData(pacote, sessao, ackSender, fileWriter,
-                                enderecoEmissor, portaEmissor);
+                                estatisticas, enderecoEmissor, portaEmissor);
                 case FIN ->
                         tratarFin(pacote, sessao, ackSender, fileWriter,
                                 enderecoEmissor, portaEmissor);
@@ -316,29 +340,31 @@ public final class GbnReceiverFsm {
      * <p>Fluxo de decisão:
      * <pre>
      * DATA recebido
+     *   ├─ contabiliza como recebido (recordPacketReceived)
      *   ├─ seqNum == expectedSeqNum ?
      *   │    ├─ NÃO  → fora de ordem
      *   │    │          descarta + reenvia último ACK (se houver)
+     *   │    │          contabiliza descarte (recordPacketDiscarded)
      *   │    └─ SIM  → em ordem; simular perda?
      *   │                 ├─ SIM  → descarta silenciosamente (sem ACK)
+     *   │                 │          contabiliza descarte (recordPacketDiscarded)
      *   │                 └─ NÃO  → grava payload em disco
      *   │                            avança expectedSeqNum
      *   │                            registra ACK na sessão
      *   │                            envia ACK(seqNum)
+     *   │                            contabiliza aceitacao (recordPacketAccepted)
+     *   │                            contabiliza ACK enviado (recordAckSent)
      * </pre>
      *
      * <p>A simulação de perda aplica-se <strong>somente</strong> a pacotes
      * em ordem, conforme Seção 4 do enunciado. Pacotes fora de ordem são
      * descartados pela política GBN antes de chegar na verificação de perda.
      *
-     * <p>A gravação em disco ocorre <strong>antes</strong> do envio do ACK.
-     * Se a escrita falhar, o ACK não é emitido e o Emissor retransmitirá o
-     * pacote — preservando a integridade do arquivo mesmo sob falha de disco.
-     *
      * @param pacote          pacote DATA recebido
      * @param sessao          estado atual da sessão de recepção
      * @param ackSender       componente de envio de ACKs
      * @param fileWriter      serviço de escrita em disco
+     * @param estatisticas    coletor de estatísticas
      * @param enderecoEmissor endereço IP do Emissor (do IncomingPacket)
      * @param portaEmissor    porta UDP do Emissor (do IncomingPacket)
      * @throws IOException se a gravação em disco falhar (erro irrecuperável)
@@ -347,13 +373,19 @@ public final class GbnReceiverFsm {
                             ReceiverSession sessao,
                             AckSender ackSender,
                             FileWriterService fileWriter,
+                            ReceiverStatistics estatisticas,
                             InetAddress enderecoEmissor,
                             int portaEmissor) throws IOException {
+
+        // Contabiliza o recebimento antes de qualquer decisão de descarte.
+        estatisticas.recordPacketReceived();
+
         int seqNumRecebido = pacote.getSeqNum();
         int seqNumEsperado = sessao.getExpectedSequenceNumber();
 
         // --- Verificação GBN: número de sequência correto? ---
         if (seqNumRecebido != seqNumEsperado) {
+            estatisticas.recordPacketDiscarded();
             tratarDataForaDeOrdem(seqNumRecebido, seqNumEsperado,
                     sessao, ackSender,
                     enderecoEmissor, portaEmissor);
@@ -362,16 +394,17 @@ public final class GbnReceiverFsm {
 
         // --- Pacote em ordem: simular perda? ---
         if (simularPerda(sessao.getParameters().getLossProb())) {
-            // Descarte silencioso: do ponto de vista do Emissor, o pacote
-            // nunca chegou. Nenhum ACK é enviado; o Emissor retransmitirá
-            // ao expirar o timeout de retransmissão.
+            // Descarte silencioso por simulação: do ponto de vista do Emissor,
+            // o pacote nunca chegou. Nenhum ACK é enviado; o Emissor
+            // retransmitirá ao expirar o timeout de retransmissão.
+            estatisticas.recordPacketDiscarded();
             return;
         }
 
         // --- Pacote em ordem, não simulado como perdido: aceitar ---
         tratarDataAceito(pacote, seqNumRecebido,
                 sessao, ackSender, fileWriter,
-                enderecoEmissor, portaEmissor);
+                estatisticas, enderecoEmissor, portaEmissor);
     }
 
     /**
@@ -431,6 +464,7 @@ public final class GbnReceiverFsm {
      *   <li>Registra {@code seqNum} como último ACK confirmado na sessão,
      *       para uso em reenvios futuros de pacotes fora de ordem.</li>
      *   <li>Envia ACK(seqNum) ao Emissor. Falhas de envio são toleradas.</li>
+     *   <li>Contabiliza aceitação e ACK enviado nas estatísticas.</li>
      * </ol>
      *
      * @param pacote          pacote DATA aceito
@@ -438,6 +472,7 @@ public final class GbnReceiverFsm {
      * @param sessao          estado da sessão
      * @param ackSender       componente de envio de ACKs
      * @param fileWriter      serviço de escrita em disco
+     * @param estatisticas    coletor de estatísticas
      * @param enderecoEmissor endereço IP do Emissor
      * @param portaEmissor    porta UDP do Emissor
      * @throws IOException se a gravação em disco falhar
@@ -447,6 +482,7 @@ public final class GbnReceiverFsm {
                                          ReceiverSession sessao,
                                          AckSender ackSender,
                                          FileWriterService fileWriter,
+                                         ReceiverStatistics estatisticas,
                                          InetAddress enderecoEmissor,
                                          int portaEmissor) throws IOException {
         // 1. Grava o payload ANTES de enviar o ACK.
@@ -466,6 +502,13 @@ public final class GbnReceiverFsm {
         //    retransmitirá por timeout e o próximo ACK bem-sucedido
         //    cobrirá este e todos os anteriores (ACK cumulativo).
         enviarAckComTolerancia(ackSender, seqNum, enderecoEmissor, portaEmissor);
+
+        // 5. Contabiliza aceitação e ACK enviado. Feito após enviarAck
+        //    para refletir apenas envios bem-sucedidos (enviarAckComTolerancia
+        //    suprime exceções, mas o pacote foi aceito e gravado de qualquer
+        //    forma — contabilizamos ambos independentemente do ACK de rede).
+        estatisticas.recordPacketAccepted();
+        estatisticas.recordAckSent();
     }
 
     /**
@@ -543,9 +586,6 @@ public final class GbnReceiverFsm {
      */
     private static void tratarHandshakeDuplicado(Packet pacote) {
         // Descarte silencioso: sessão já estabelecida e ativa.
-        // O Emissor, ao não receber o ACK(0) novamente, sofrerá timeout
-        // no HANDSHAKE e poderá reenviar. O próximo HANDSHAKE chegará
-        // aqui e será descartado da mesma forma, sem corromper o estado.
     }
 
     /**
@@ -587,7 +627,7 @@ public final class GbnReceiverFsm {
             ackSender.sendAck(ackNum, enderecoEmissor, portaEmissor);
         } catch (IOException e) {
             System.err.printf(
-                    "[GbnReceiverFsm] Aviso: falha ao enviar ACK(%d) para %s:%d — %s. "
+                    "[GbnReceiverFsm] Aviso: falha ao enviar ACK(%d) para %s:%d -- %s. "
                             + "O Emissor retransmitirá por timeout.%n",
                     ackNum, enderecoEmissor.getHostAddress(), portaEmissor, e.getMessage()
             );
