@@ -1,6 +1,4 @@
-package br.unifal.redes;
-
-import br.unifal.redes.sender.network.WindowManager;
+package br.unifal.redes.sender.network;
 
 public class TestWindowManager {
 

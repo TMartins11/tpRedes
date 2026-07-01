@@ -1,7 +1,4 @@
-package br.unifal.redes;
-
-import br.unifal.redes.common.Packet;
-import br.unifal.redes.common.PacketCodec;
+package br.unifal.redes.common;
 
 public class TestPacketCodec {
 

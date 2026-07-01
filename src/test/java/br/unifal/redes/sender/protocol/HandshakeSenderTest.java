@@ -1,8 +1,7 @@
-package br.unifal.redes;
+package br.unifal.redes.sender.protocol;
 
 import br.unifal.redes.common.SessionParameters;
 import br.unifal.redes.sender.network.SenderSocketService;
-import br.unifal.redes.sender.protocol.HandshakeSender;
 
 import java.net.InetAddress;
 

@@ -1,8 +1,7 @@
-package br.unifal.redes;
+package br.unifal.redes.sender.protocol;
 
 import br.unifal.redes.common.Packet;
 import br.unifal.redes.sender.network.SenderSocketService;
-import br.unifal.redes.sender.protocol.AckReceiver;
 
 public class AckReceiverTest {
 

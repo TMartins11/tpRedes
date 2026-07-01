@@ -1,4 +1,4 @@
-package br.unifal.redes;
+package br.unifal.redes.receiver;
 
 import br.unifal.redes.sender.network.SenderSocketService;
 

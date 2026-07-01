@@ -40,6 +40,13 @@ import java.util.Objects;
  * estruturalmente a sequência {@code 0} exclusivamente para o HANDSHAKE,
  * sem qualquer verificação baseada em {@code PacketType} no ponto onde os
  * ACKs de DATA são processados.
+ *
+ * <p><strong>Progresso em tempo real (R6):</strong> a cada ACK recebido
+ * durante a fase DATA, {@link #imprimirProgresso} exibe em linha única
+ * (sobrescrita via {@code \r}) o número de pacotes confirmados, ACKs
+ * recebidos, retransmissões e throughput instantâneo estimado. A linha é
+ * finalizada com uma quebra de linha ({@code \n}) ao término da fase DATA,
+ * antes do FIN.
  */
 public final class GbnSenderFsm {
 
@@ -66,6 +73,19 @@ public final class GbnSenderFsm {
     private final int timeoutMillis;
 
     /**
+     * Total de blocos do arquivo — usado para calcular o percentual de
+     * progresso exibido em tempo real.
+     */
+    private final int totalChunks;
+
+    /**
+     * Instante de início da fase DATA em milissegundos ({@link System#currentTimeMillis()}),
+     * usado para calcular o throughput instantâneo exibido no progresso.
+     * Inicializado em zero e preenchido no início de {@link #transmitFileChunks}.
+     */
+    private long inicioDataMs;
+
+    /**
      * @param socketService     serviço de socket UDP, já aberto; não pode ser {@code null}
      * @param sessionParameters parâmetros da sessão a negociar no HANDSHAKE; não pode ser {@code null}
      * @param receiverAddress   endereço IP do Receptor; não pode ser {@code null}
@@ -79,18 +99,19 @@ public final class GbnSenderFsm {
                         int receiverPort,
                         List<byte[]> fileChunks,
                         int timeoutMillis) {
-        this.socketService = Objects.requireNonNull(socketService, "socketService não pode ser nulo");
-        this.sessionParameters = Objects.requireNonNull(sessionParameters, "sessionParameters não pode ser nulo");
-        this.receiverAddress = Objects.requireNonNull(receiverAddress, "receiverAddress não pode ser nulo");
+        this.socketService = Objects.requireNonNull(socketService, "socketService nao pode ser nulo");
+        this.sessionParameters = Objects.requireNonNull(sessionParameters, "sessionParameters nao pode ser nulo");
+        this.receiverAddress = Objects.requireNonNull(receiverAddress, "receiverAddress nao pode ser nulo");
         if (receiverPort < 1 || receiverPort > 65535) {
             throw new IllegalArgumentException("receiverPort must be in [1, 65535], got: " + receiverPort);
         }
         this.receiverPort = receiverPort;
-        this.fileChunks = List.copyOf(Objects.requireNonNull(fileChunks, "fileChunks não pode ser nulo"));
+        this.fileChunks = List.copyOf(Objects.requireNonNull(fileChunks, "fileChunks nao pode ser nulo"));
         if (timeoutMillis <= 0) {
             throw new IllegalArgumentException("timeoutMillis must be > 0, got: " + timeoutMillis);
         }
         this.timeoutMillis = timeoutMillis;
+        this.totalChunks   = this.fileChunks.size();
     }
 
     // -------------------------------------------------------------------------
@@ -116,6 +137,9 @@ public final class GbnSenderFsm {
 
         // Fase 2 — DATA.
         transmitFileChunks(windowManager, packetBuffer, timeoutManager, statistics);
+
+        // Encerra a linha de progresso antes de imprimir o FIN e as estatísticas.
+        System.out.println();
 
         // Fase 3 — encerramento.
         sendFin(windowManager, statistics);
@@ -172,7 +196,7 @@ public final class GbnSenderFsm {
         }
 
         throw new IOException(
-                "HANDSHAKE não confirmado após " + MAX_HANDSHAKE_ATTEMPTS + " tentativas");
+                "HANDSHAKE nao confirmado apos " + MAX_HANDSHAKE_ATTEMPTS + " tentativas");
     }
 
     // -------------------------------------------------------------------------
@@ -184,6 +208,10 @@ public final class GbnSenderFsm {
      * deslizante, processando ACKs recebidos e disparando retransmissões
      * quando o timeout expira, até que todos os blocos tenham sido enviados
      * e confirmados.
+     *
+     * <p>A cada ACK recebido com sucesso, chama {@link #imprimirProgresso}
+     * para atualizar a linha de progresso em tempo real no terminal,
+     * conforme exigido pelo requisito R6 do enunciado.
      */
     private void transmitFileChunks(WindowManager windowManager,
                                     PacketBuffer<Packet> packetBuffer,
@@ -193,6 +221,10 @@ public final class GbnSenderFsm {
         // por ACKs — não deve ser confundido com timeoutMillis, que é o
         // timeout de retransmissão do protocolo, gerido por TimeoutManager.
         socketService.setSoTimeoutMillis(Math.max(1, timeoutMillis / 10));
+
+        // Registra o instante de início da fase DATA para cálculo de
+        // throughput no progresso em tempo real.
+        inicioDataMs = System.currentTimeMillis();
 
         int nextChunkIndex = 0;
 
@@ -239,6 +271,18 @@ public final class GbnSenderFsm {
                 } else {
                     timeoutManager.restart();
                 }
+
+                // Exibe o progresso em tempo real a cada ACK recebido.
+                // O número de pacotes confirmados é (ackNum - FIRST_DATA_SEQUENCE_NUMBER + 1),
+                // pois a numeração DATA começa em FIRST_DATA_SEQUENCE_NUMBER (= 1).
+                // Limitamos ao máximo de totalChunks para evitar exibir valor
+                // acima de 100% em caso de ACK do FIN chegando por aqui.
+                int confirmados = Math.min(
+                        ackNum - FIRST_DATA_SEQUENCE_NUMBER + 1,
+                        totalChunks
+                );
+                imprimirProgresso(confirmados, statistics);
+
             } catch (SocketTimeoutException semAckNesteCiclo) {
                 // Nenhum ACK chegou neste ciclo de polling; segue para a
                 // checagem de expiração do timeout abaixo.
@@ -279,5 +323,63 @@ public final class GbnSenderFsm {
         } catch (SocketTimeoutException semConfirmacaoDoFin) {
             // Melhor esforço: esta proposta não retransmite o FIN.
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Progresso em tempo real (R6)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Imprime em tempo real, sobrescrevendo a linha atual do terminal via
+     * {@code \r}, o estado corrente da transmissão.
+     *
+     * <p>Campos exibidos:
+     * <ul>
+     *   <li><strong>Progresso</strong>: {@code confirmados/totalChunks} e
+     *       percentual correspondente.</li>
+     *   <li><strong>Enviados</strong>: total de datagramas DATA colocados na
+     *       rede, incluindo retransmissões
+     *       ({@link SenderStatistics.Snapshot#getTotalPacketsSent()}).</li>
+     *   <li><strong>ACKs</strong>: total de confirmações recebidas do Receptor
+     *       ({@link SenderStatistics.Snapshot#getTotalAcksReceived()}).</li>
+     *   <li><strong>Retrans</strong>: total de retransmissões disparadas por
+     *       timeout ({@link SenderStatistics.Snapshot#getTotalRetransmitted()}).</li>
+     *   <li><strong>Throughput</strong>: taxa de transferência instantânea
+     *       calculada como {@code bytesUnicos / tempoDecorrido}, onde
+     *       {@code bytesUnicos} = {@code confirmados × 1024} bytes — reflete
+     *       a taxa efetiva de entrega ao Receptor, não o tráfego bruto na rede.</li>
+     * </ul>
+     *
+     * <p>O uso de {@code \r} sem {@code \n} mantém o cursor na mesma linha,
+     * de modo que a próxima chamada sobrescreve a linha anterior. A linha é
+     * finalizada com {@code \n} em {@link #run()} após o término da fase DATA.
+     *
+     * @param confirmados número de blocos únicos confirmados pelo Receptor
+     * @param statistics  estatísticas acumuladas até o momento
+     */
+    private void imprimirProgresso(int confirmados, SenderStatistics statistics) {
+        SenderStatistics.Snapshot snap = statistics.snapshot();
+
+        long decorrido = System.currentTimeMillis() - inicioDataMs;
+        double throughputKbps = decorrido > 0
+                ? ((double) confirmados * 1024) / decorrido   // KB/s
+                : 0.0;
+
+        int percentual = totalChunks > 0
+                ? (int) ((confirmados * 100L) / totalChunks)
+                : 100;
+
+        // \r sobrescreve a linha atual sem avançar para a próxima,
+        // produzindo o efeito de atualização em tempo real no terminal.
+        System.out.printf(
+                "\r[Progresso] %d/%d (%3d%%) | Enviados: %d | ACKs: %d | Retrans: %d | Throughput: %.2f KB/s   ",
+                confirmados,
+                totalChunks,
+                percentual,
+                snap.getTotalPacketsSent(),
+                snap.getTotalAcksReceived(),
+                snap.getTotalRetransmitted(),
+                throughputKbps
+        );
     }
 }

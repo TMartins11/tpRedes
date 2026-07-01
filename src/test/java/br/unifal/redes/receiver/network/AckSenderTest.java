@@ -1,6 +1,4 @@
-package br.unifal.redes;
-
-import br.unifal.redes.receiver.network.AckSender;
+package br.unifal.redes.receiver.network;
 
 import java.net.DatagramSocket;
 import java.net.InetAddress;
