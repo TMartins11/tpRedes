@@ -19,29 +19,6 @@ import java.net.SocketTimeoutException;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * PROPOSTA DE REFERÊNCIA — o arquivo {@code SenderFSM.java} original não foi
- * recebido nesta conversa (apenas seu nome apareceu na lista de uploads), e
- * portanto este não é um "diff" da classe real do projeto, e sim uma
- * implementação completa e compilável, construída exclusivamente a partir
- * das APIs reais já existentes ({@code HandshakeSender}, {@code DataSender},
- * {@code AckReceiver}, {@code RetransmissionManager}, {@code WindowManager},
- * {@code TimeoutManager}, {@code PacketBuffer}, {@code SenderStatistics}),
- * que demonstra exatamente a correção estrutural pedida. Se a classe real
- * tiver uma estrutura diferente, os pontos centrais a transplantar são os
- * métodos {@link #performHandshake()} e o início de {@link #transmitFileChunks}.
- *
- * <p><strong>Correção central:</strong> esta FSM possui duas fases
- * sequenciais e não concorrentes — HANDSHAKE e DATA. A fase de HANDSHAKE
- * (a) envia o HANDSHAKE (que sempre usa {@code seqNum = 0}, fixo, via
- * {@link Packet#createHandshake(byte[])}), (b) bloqueia aguardando seu ACK
- * através de {@link AckReceiver#receiveAck}, e (c) só então cria o
- * {@link WindowManager} da fase de DATA, já inicializado com
- * {@code initialSequenceNumber = 1} — nunca {@code 0}. Isso reserva
- * estruturalmente a sequência {@code 0} exclusivamente para o HANDSHAKE,
- * sem qualquer verificação baseada em {@code PacketType} no ponto onde os
- * ACKs de DATA são processados.
- */
 public final class SenderFSM {
 
     /**

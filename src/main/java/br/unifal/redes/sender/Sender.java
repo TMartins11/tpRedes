@@ -13,89 +13,26 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
-/**
- * Ponto de entrada do módulo Emissor Go-Back-N.
- *
- * <p>Conforme especificação do trabalho (Seção 3.3), a linha de comando é:
- * <pre>
- *   java Emissor &lt;arquivo_origem&gt; &lt;IP_destino&gt;:&lt;path_destino&gt; &lt;tamanho_janela&gt; &lt;prob_perda&gt;
- *
- *   Exemplo:
- *   java Emissor /home/alice/foto.jpg 192.168.0.10:/tmp/foto_recebida.jpg 8 0.10
- * </pre>
- *
- * <p>Esta classe é exclusivamente bootstrap: valida os 4 argumentos obrigatórios,
- * lê o arquivo de origem em blocos de {@value #CHUNK_SIZE} bytes, abre o socket
- * UDP e delega toda a lógica Go-Back-N para {@link SenderFSM}.
- *
- * <p><strong>Sobre progresso em tempo real (R6):</strong> {@link SenderFSM#run()}
- * é um método bloqueante que só devolve controle ao terminar a transmissão
- * completa. Como a FSM não expõe callback ou acesso à estatística durante a
- * execução, o progresso em tempo real não pode ser implementado nesta camada
- * sem modificar a assinatura da FSM. O que é exibido aqui são as estatísticas
- * finais consolidadas após {@code run()} retornar.
- *
- * <p><strong>Porta do Receptor:</strong> fixa em {@value #RECEIVER_PORT},
- * conforme Seção 3.2 do enunciado — não é configurável via linha de comando.
- *
- * <p><strong>Timeout de retransmissão:</strong> fixo em
- * {@value #RETRANSMISSION_TIMEOUT_MILLIS} ms, valor razoável para testes em LAN.
- */
 public final class Sender {
 
     // -------------------------------------------------------------------------
     // Constantes de configuração
     // -------------------------------------------------------------------------
 
-    /** Número exato de argumentos de linha de comando exigidos pelo enunciado. */
     private static final int EXPECTED_ARG_COUNT = 4;
 
-    /**
-     * Tamanho do payload de cada segmento DATA em bytes.
-     * Deve ser igual a {@code Packet.MAX_PAYLOAD_SIZE} (1024), conforme Seção 3.4.
-     */
     private static final int CHUNK_SIZE = 1024;
 
-    /**
-     * Porta UDP fixa do Receptor, conforme Seção 3.2 do enunciado.
-     * Não é configurável via linha de comando.
-     */
     private static final int RECEIVER_PORT = 5000;
 
-    /**
-     * Timeout de retransmissão em milissegundos.
-     * Valor de 3 segundos é adequado para LAN e conservador o suficiente
-     * para cobrir eventuais picos de latência durante os testes.
-     */
     private static final int RETRANSMISSION_TIMEOUT_MILLIS = 500;
 
-    /** Classe utilitária — não instanciável. */
     private Sender() {}
 
     // -------------------------------------------------------------------------
     // Ponto de entrada
     // -------------------------------------------------------------------------
 
-    /**
-     * Método principal do Emissor.
-     *
-     * <p>Fluxo de execução:
-     * <ol>
-     *   <li>Valida que exatamente 4 argumentos foram fornecidos.</li>
-     *   <li>Faz o parse e a validação de cada argumento.</li>
-     *   <li>Lê o arquivo de origem em chunks de {@value #CHUNK_SIZE} bytes.</li>
-     *   <li>Cria os {@link SessionParameters} da sessão.</li>
-     *   <li>Abre o socket UDP em porta efêmera.</li>
-     *   <li>Cria e executa a {@link SenderFSM}.</li>
-     *   <li>Exibe as estatísticas finais.</li>
-     * </ol>
-     *
-     * @param args argumentos de linha de comando:
-     *             {@code args[0]} = caminho do arquivo de origem,
-     *             {@code args[1]} = {@code IP:path} do destino,
-     *             {@code args[2]} = tamanho da janela (N &gt; 0),
-     *             {@code args[3]} = probabilidade de perda [0.0, 1.0)
-     */
     public static void main(String[] args) {
 
         // 1. Valida o número de argumentos — qualquer desvio exibe o uso correto.
@@ -199,22 +136,6 @@ public final class Sender {
     // Exibição de estatísticas
     // -------------------------------------------------------------------------
 
-    /**
-     * Exibe o relatório final de estatísticas da transmissão.
-     *
-     * <p>O throughput é calculado aqui, a partir de {@code totalBytesSent}
-     * (bytes de payload efetivamente colocados na rede, incluindo retransmissões)
-     * e do tempo de parede medido no {@code main()} — já que {@link SenderStatistics}
-     * não armazena timestamps nem calcula throughput internamente.
-     *
-     * @param snapshot      retrato final das estatísticas produzido por
-     *                       {@link SenderFSM#run()}
-     * @param tamanhoArquivo tamanho do arquivo original em bytes (bytes únicos,
-     *                       sem contar retransmissões), usado para mostrar
-     *                       o throughput efetivo do ponto de vista da aplicação
-     * @param duracaoMs      tempo total decorrido desde a abertura do socket
-     *                       até o retorno de {@code run()}, em milissegundos
-     */
     private static void exibirEstatisticas(SenderStatistics.Snapshot snapshot,
                                            long tamanhoArquivo,
                                            long duracaoMs) {
@@ -257,15 +178,6 @@ public final class Sender {
     // Helpers de parse e validação
     // -------------------------------------------------------------------------
 
-    /**
-     * Valida e retorna o {@link Path} do arquivo de origem.
-     *
-     * <p>Encapsula todas as verificações de existência, tipo e permissão de
-     * leitura numa mensagem de erro clara antes de qualquer outra operação.
-     *
-     * @param raw o argumento bruto da linha de comando
-     * @return o {@link Path} validado e pronto para uso
-     */
     private static Path parsearArquivoOrigem(String raw) {
         Path p = Path.of(raw);
         if (!Files.exists(p)) {
@@ -283,12 +195,6 @@ public final class Sender {
         return p;
     }
 
-    /**
-     * Faz o parse do endereço IP/hostname do Receptor.
-     *
-     * @param raw o endereço IP ou hostname bruto
-     * @return o {@link InetAddress} resolvido
-     */
     private static InetAddress parsearEndereco(String raw) {
         try {
             return InetAddress.getByName(raw);
@@ -301,12 +207,6 @@ public final class Sender {
         }
     }
 
-    /**
-     * Faz o parse e valida o tamanho da janela.
-     *
-     * @param raw o argumento bruto da linha de comando
-     * @return o windowSize validado ({@code > 0})
-     */
     private static int parsearWindowSize(String raw) {
         try {
             int value = Integer.parseInt(raw);
@@ -324,12 +224,6 @@ public final class Sender {
         }
     }
 
-    /**
-     * Faz o parse e valida a probabilidade de perda.
-     *
-     * @param raw o argumento bruto da linha de comando
-     * @return a probabilidade validada no intervalo {@code [0.0, 1.0)}
-     */
     private static double parsearLossProb(String raw) {
         try {
             // Aceita tanto ponto quanto vírgula como separador decimal,
@@ -355,12 +249,6 @@ public final class Sender {
     // Utilitários de formatação
     // -------------------------------------------------------------------------
 
-    /**
-     * Formata uma duração em milissegundos na forma {@code Xm Ys} ou {@code Y.ZZZs}.
-     *
-     * @param ms duração em milissegundos
-     * @return string legível com a duração
-     */
     private static String formatarDuracao(long ms) {
         if (ms >= 60_000) {
             long minutos  = ms / 60_000;
@@ -374,9 +262,6 @@ public final class Sender {
     // Exibição de uso
     // -------------------------------------------------------------------------
 
-    /**
-     * Exibe as instruções de uso e encerra o processo com código 1.
-     */
     private static void exibirUsoESair() {
         System.err.println();
         System.err.println("╔═══════════════════════════════════════════════════════════════════╗");

@@ -9,29 +9,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * Lê um arquivo fonte do disco e divide seu conteúdo em pedaços (chunks) de bytes
- * de tamanho fixo e ordenados.
- *
- * <p>Esta classe não sabe nada sobre o protocolo GBN, pacotes, números
- * de sequência, soquetes ou qualquer forma de E/S de rede. Seu contrato é simples:
- * <pre>
- *   Arquivo -&gt; Bytes -&gt; Pedaços (Chunks)
- * </pre>
- *
- * <p>Os pedaços são retornados na ordem exata em que aparecem no arquivo fonte.
- * Cada pedaço tem um comprimento igual ao tamanho de pedaço configurado, exceto
- * possivelmente o último, que pode ser mais curto se o tamanho do arquivo não for
- * um múltiplo exato do tamanho do pedaço. Interpretar, numerar ou transmitir
- * esses pedaços é responsabilidade de componentes de nível superior (por exemplo, a
- * FSM do Transmissor).
- *
- * <p>Esta classe não possui estado, além do tamanho imutável do pedaço, e pode ser
- * reutilizada para ler múltiplos arquivos sequencialmente. Não é thread-safe para
- * leituras concorrentes da mesma instância, embora leituras concorrentes de
- * diferentes arquivos a partir de threads separadas sejam seguras, pois nenhum
- * estado mutável compartilhado está envolvido.
- */
 public final class FileChunkReader {
 
     private final int chunkSize;
@@ -53,23 +30,6 @@ public final class FileChunkReader {
     // Leitura
     // -------------------------------------------------------------------------
 
-    /**
-     * Lê {@code sourceFile} por completo e o divide em pedaços ordenados de no
-     * máximo {@link #getChunkSize()} bytes cada.
-     *
-     * <p>A lista retornada preserva a ordem original dos bytes do arquivo: o
-     * primeiro pedaço contém os primeiros {@code chunkSize} bytes, o segundo pedaço
-     * os próximos {@code chunkSize} bytes, e assim por diante. Apenas o pedaço final
-     * pode ser mais curto que {@code chunkSize}, se o tamanho do arquivo não for um
-     * múltiplo exato dele. Se o arquivo estiver vazio, uma lista vazia é retornada.
-     *
-     * @param sourceFile caminho para o arquivo a ser lido; não deve ser {@code null}
-     * @return uma lista imutável e ordenada de pedaços de bytes
-     * @throws NullPointerException     se {@code sourceFile} for {@code null}
-     * @throws IllegalArgumentException se {@code sourceFile} não existir,
-     *                                   não for um arquivo regular ou não for legível
-     * @throws IOException              se ocorrer um erro de E/S durante a leitura
-     */
     public List<byte[]> readChunks(Path sourceFile) throws IOException {
         validateSourceFile(sourceFile);
 

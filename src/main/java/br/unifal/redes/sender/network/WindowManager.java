@@ -1,22 +1,6 @@
 package br.unifal.redes.sender.network;
 
-/**
- * Mantém o estado da janela deslizante do transmissor Go-Back-N.
- *
- * <p>Esta classe é um componente puro de estado de protocolo. Ela rastreia o número
- * de sequência base, o próximo número de sequência a ser atribuído e o
- * tamanho de janela configurado, e expõe as operações que a FSM do transmissor
- * precisa para decidir quando pode enviar, quando deve esperar e como deslizar a
- * janela para frente conforme os ACKs cumulativos chegam.
- *
- * <p>Esta classe não realiza E/S de rede, E/S de arquivo, temporização ou
- * lógica de retransmissão. Ela não sabe como um pacote se parece no
- * cabo — ela raciocina apenas sobre números de sequência como inteiros.
- *
- * <p>Segurança de thread: esta classe não é sincronizada. Ela é destinada a ser
- * de propriedade e conduzida por uma única thread da FSM do transmissor; chamadores que
- * precisam de acesso concorrente devem coordenar externamente.
- */
+
 public final class WindowManager {
 
     private final int windowSize;
@@ -45,27 +29,6 @@ public final class WindowManager {
         this(windowSize, 0);
     }
 
-    /**
-     * Cria um novo gerenciador de janela com o tamanho de janela informado,
-     * iniciando os números de sequência base e próximo em
-     * {@code initialSequenceNumber} em vez do tradicional {@code 0}.
-     *
-     * <p>Esta sobrecarga existe para permitir que o protocolo reserve
-     * deliberadamente certos números de sequência fora do espaço de
-     * numeração dos segmentos DATA — por exemplo, reservando a sequência
-     * {@code 0} exclusivamente para o pacote de HANDSHAKE e seu ACK, e
-     * iniciando a numeração dos segmentos DATA em {@code 1}. Esta classe
-     * continua não sabendo nada sobre HANDSHAKE ou qualquer outro tipo de
-     * pacote — apenas aceita, de forma genérica, qual deve ser o ponto de
-     * partida da numeração.
-     *
-     * @param windowSize            o número máximo de pacotes não confirmados
-     *                              permitidos em trânsito simultaneamente; deve ser &gt; 0
-     * @param initialSequenceNumber o número de sequência a partir do qual a
-     *                              janela deve começar a contar; deve ser &gt;= 0
-     * @throws IllegalArgumentException se {@code windowSize} não for positivo,
-     *                                   ou se {@code initialSequenceNumber} for negativo
-     */
     public WindowManager(int windowSize, int initialSequenceNumber) {
         if (windowSize <= 0) {
             throw new IllegalArgumentException("windowSize deve ser > 0, recebido: " + windowSize);
@@ -136,26 +99,6 @@ public final class WindowManager {
         return assignedSequenceNumber;
     }
 
-    /**
-     * Desliza a janela para frente em resposta a um ACK cumulativo.
-     *
-     * <p>{@code ackSequenceNumber} é interpretado usando a semântica padrão
-     * de ACK cumulativo do GBN: ele confirma que todos os pacotes com um número
-     * de sequência até e incluindo {@code ackSequenceNumber} foram
-     * entregues. A nova base torna-se {@code ackSequenceNumber + 1}.
-     *
-     * <p>ACKs desatualizados ou duplicados — onde {@code ackSequenceNumber + 1}
-     * não move a base estritamente para frente — são silenciosamente ignorados,
-     * pois receber ACKs duplicados é um comportamento normal e esperado no
-     * Go-Back-N e não deve ser tratado como erro.
-     *
-     * @param ackSequenceNumber o maior número de sequência sendo
-     *                          reconhecido cumulativamente; deve ser &gt;= 0
-     * @throws IllegalArgumentException se {@code ackSequenceNumber} for
-     *                                   negativo, ou se ele reconhecer um
-     *                                   número de sequência que nunca foi enviado
-     *                                   (ou seja, {@code ackSequenceNumber >= next})
-     */
     public void processAck(int ackSequenceNumber) {
         if (ackSequenceNumber < 0) {
             throw new IllegalArgumentException(

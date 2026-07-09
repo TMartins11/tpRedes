@@ -2,30 +2,6 @@ package br.unifal.redes.sender.network;
 
 import java.util.concurrent.TimeUnit;
 
-/**
- * Rastreia o estado do timeout de retransmissão do transmissor Go-Back-N.
- *
- * <p>Esta classe é um componente puro de suporte ao protocolo. Ela armazena uma duração
- * de timeout configurada e o instante em que um temporizador foi armado pela última vez,
- * e expõe cálculos — tempo decorrido, tempo restante, expiração — que a
- * FSM do transmissor consulta periodicamente para decidir quando um burst de
- * retransmissão é devido.
- *
- * <p>Esta classe não realiza retransmissão real, E/S de rede, E/S de arquivo
- * e não agenda nenhum tipo de trabalho em segundo plano. Não há
- * {@link Thread}, {@code Timer} ou {@code ScheduledExecutorService}
- * envolvidos — espera-se que a FSM chame {@link #hasExpired()} periodicamente
- * (por exemplo, a partir de seu próprio loop de polling) e reaja de acordo.
- *
- * <p>Os cálculos de tempo decorrido usam {@link System#nanoTime()} em vez de
- * {@link System#currentTimeMillis()}, pois {@code nanoTime} é monotônico
- * e não é afetado por ajustes de relógio de parede, tornando-o a escolha correta
- * para medir durações.
- *
- * <p>Segurança de thread: esta classe não é sincronizada. Ela é destinada a ser
- * de propriedade e conduzida por uma única thread da FSM do transmissor; chamadores que
- * precisam de acesso concorrente devem coordenar externamente.
- */
 public final class TimeoutManager {
 
     private final long timeoutNanos;

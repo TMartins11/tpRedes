@@ -7,32 +7,6 @@ import java.net.InetAddress;
 import java.net.SocketException;
 import java.util.Objects;
 
-/**
- * Encapsula o uso de um {@link DatagramSocket} para o lado Emissor do
- * protocolo Go-Back-N.
- *
- * <p>Esta classe é responsável apenas pela comunicação UDP de baixo nível:
- * abrir e fechar o socket, enviar e receber {@link DatagramPacket}, e expor
- * informações básicas do socket (porta local, endereço local). Ela não
- * conhece nada sobre o protocolo Go-Back-N — não sabe o que é uma janela
- * deslizante, um número de sequência, um timeout de retransmissão, nem o
- * formato de um pacote do protocolo. Essas responsabilidades pertencem a
- * outras classes ({@code WindowManager}, {@code TimeoutManager},
- * {@code PacketBuffer}, e ao futuro FSM do Emissor).
- *
- * <p>Esta classe também não realiza leitura de arquivos, não cria threads e
- * não agenda nenhum tipo de trabalho em segundo plano. Toda chamada é
- * síncrona e bloqueante, exatamente como o {@link DatagramSocket} subjacente
- * se comporta por padrão.
- *
- * <p>Ciclo de vida esperado: {@link #open()} (ou {@link #open(int)}) uma vez,
- * qualquer número de chamadas a {@link #send} e {@link #receive}, e
- * {@link #close()} exatamente uma vez ao final. Implementa
- * {@link AutoCloseable} para uso em blocos try-with-resources.
- *
- * <p>Thread-safety: esta classe não é sincronizada. O chamador é responsável
- * por coordenar o acesso concorrente, caso necessário.
- */
 public final class SenderSocketService implements AutoCloseable {
 
     private DatagramSocket socket;

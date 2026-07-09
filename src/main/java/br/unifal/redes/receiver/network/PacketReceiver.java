@@ -8,29 +8,6 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.util.Objects;
 
-/**
- * Aguarda datagramas UDP em um {@link DatagramSocket} e os converte em
- * objetos {@link IncomingPacket} prontos para consumo pela FSM.
- *
- * <p>Responsabilidade única: receber um datagrama bruto, delegar a
- * desserialização ao {@link PacketSerializer} e retornar o resultado
- * encapsulado com as informações de endereçamento do remetente.
- *
- * <p>Esta classe <strong>não conhece</strong>:
- * <ul>
- *   <li>a FSM ou qualquer regra do protocolo Go-Back-N;</li>
- *   <li>sessão, estatísticas ou escrita de arquivo;</li>
- *   <li>ACKs ou lógica de retransmissão.</li>
- * </ul>
- *
- * <p>O {@link DatagramSocket} é injetado no construtor e <em>não é de
- * propriedade</em> desta classe — o chamador é responsável por abri-lo e
- * fechá-lo. Isso facilita testes sem abrir sockets reais.
- *
- * <p><strong>Thread-safety:</strong> {@link DatagramSocket#receive} bloqueia
- * a thread chamante. Não compartilhe uma instância desta classe entre múltiplas
- * threads.
- */
 public final class PacketReceiver {
 
     private final DatagramSocket socket;

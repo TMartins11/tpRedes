@@ -5,20 +5,6 @@ import br.unifal.redes.common.SessionParameters;
 import java.time.Instant;
 import java.util.Objects;
 
-/**
- * Representa o estado mutável de uma única sessão de recepção Go-Back-N.
- *
- * <p>Esta classe é a única fonte da verdade para o estado em nível de protocolo durante uma
- * transferência. Ela não realiza nenhuma E/S de rede ou E/S de arquivo. Sua única função é
- * armazenar e expor os valores que a FSM (Máquina de Estados Finitos) irá ler e atualizar
- * conforme os pacotes chegam.
- *
- * <p>Instâncias são criadas uma vez por transferência, via {@link #open(SessionParameters, String)},
- * e fechadas exatamente uma vez via {@link #close()}.
- *
- * <p>Segurança de thread: os acessores individuais de campo não são sincronizados. A FSM que
- * conduz esta sessão é responsável por coordenar o acesso concorrente quando aplicável.
- */
 public final class ReceiverSession {
 
     /** Estado de protocolo desta sessão. */

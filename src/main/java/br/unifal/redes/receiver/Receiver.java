@@ -9,30 +9,6 @@ import br.unifal.redes.receiver.statistics.ReceiverStatistics;
 import java.io.IOException;
 import java.net.DatagramSocket;
 
-/**
- * Ponto de entrada do módulo Receptor.
- *
- * <p>Responsabilidades desta classe:
- * <ul>
- *   <li>Validar o argumento de linha de comando.</li>
- *   <li>Abrir o {@link DatagramSocket} na porta configurada.</li>
- *   <li>Instanciar {@link PacketReceiver}, {@link AckSender},
- *       {@link FileWriterService} e {@link ReceiverStatistics}.</li>
- *   <li>Instanciar e executar a {@link GbnReceiverFsm}, que concentra
- *       toda a lógica do protocolo Go-Back-N.</li>
- *   <li>Exibir as estatísticas finais retornadas pela FSM.</li>
- * </ul>
- *
- * <p>Não há nenhuma lógica de protocolo nesta classe — apenas bootstrap.
- *
- * <h2>Uso</h2>
- * <pre>
- *   java Receiver &lt;porta&gt;
- *
- *   Exemplo:
- *   java Receiver 5000
- * </pre>
- */
 public final class Receiver {
 
     private static final int EXPECTED_ARG_COUNT = 1;
@@ -85,19 +61,6 @@ public final class Receiver {
     // Exibição de estatísticas
     // -------------------------------------------------------------------------
 
-    /**
-     * Exibe o relatório final de estatísticas da recepção, conforme exigido
-     * pela Seção 3.2 do enunciado:
-     * <ul>
-     *   <li>Total de pacotes DATA recebidos (antes de qualquer filtragem).</li>
-     *   <li>Total de pacotes descartados (fora de ordem + simulados como perdidos).</li>
-     *   <li>Total de pacotes aceitos e gravados em disco.</li>
-     *   <li>Total de ACKs enviados de volta ao Emissor.</li>
-     *   <li>Taxa de perda efetiva (descartados / recebidos).</li>
-     * </ul>
-     *
-     * @param snapshot retrato imutável das estatísticas retornado pela FSM
-     */
     private static void exibirEstatisticas(ReceiverStatistics.Snapshot snapshot) {
         System.out.println();
         System.out.println("╔══════════════════════════════════════════════════════════════╗");
